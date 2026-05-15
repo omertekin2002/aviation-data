@@ -1,5 +1,6 @@
 {
-  "stockPrice": 946.0,
+  "stockPrice": 946,
+  "currency": "GBp",
   "marketCap": 978742784,
   "peRatio": 6.03
 }

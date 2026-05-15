@@ -89,13 +89,15 @@ jobs:
               )
               market_cap = fast.get("market_cap") or info.get("marketCap")
               pe_ratio = info.get("trailingPE") or info.get("forwardPE")
+              currency = info.get("currency") or fast.get("currency")
 
-              if price is None or market_cap is None:
+              if price is None or market_cap is None or currency is None:
                   missing = [
                       name
                       for name, value in {
                           "stockPrice": price,
                           "marketCap": market_cap,
+                          "currency": currency,
                       }.items()
                       if value is None
                   ]
@@ -103,13 +105,14 @@ jobs:
 
               out = {
                   "stockPrice": clean_number(price, 2),
+                  "currency": currency,
                   "marketCap": clean_number(market_cap),
                   "peRatio": clean_number(pe_ratio, 2),
               }
 
               path = Path("data") / f"{file_key}.json"
               path.write_text(json.dumps(out, indent=2, allow_nan=False) + "\n")
-              print(f"{symbol}: ${out['stockPrice']} | market cap {out['marketCap']} | P/E {out['peRatio']}")
+              print(f"{symbol}: {out['stockPrice']} {out['currency']} | market cap {out['marketCap']} | P/E {out['peRatio']}")
           PY
 
       - name: Commit updated data

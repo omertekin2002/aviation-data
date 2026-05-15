@@ -1,5 +1,6 @@
 {
   "stockPrice": 4.88,
+  "currency": "USD",
   "marketCap": 1815452160,
   "peRatio": -6.63
 }

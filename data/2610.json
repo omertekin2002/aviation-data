@@ -1,5 +1,6 @@
 {
   "stockPrice": 18.5,
+  "currency": "TWD",
   "marketCap": 112514195456,
   "peRatio": 7.77
 }

@@ -1,5 +1,6 @@
 {
-  "stockPrice": 2550.0,
+  "stockPrice": 2550,
+  "currency": "JPY",
   "marketCap": 1096060633088,
   "peRatio": 8.31
 }

@@ -137,7 +137,7 @@
 
     table {
       width: 100%;
-      min-width: 860px;
+      min-width: 940px;
       border-collapse: collapse;
     }
 
@@ -290,7 +290,7 @@
         </div>
         <div>
           <span>fields</span>
-          <strong>price / cap / p-e</strong>
+          <strong>price / currency / cap / p-e</strong>
         </div>
         <div>
           <span>refresh</span>
@@ -306,6 +306,7 @@
               <th>Company / security</th>
               <th>Exchange</th>
               <th>Price</th>
+              <th>Currency</th>
               <th>Market cap</th>
               <th>P/E</th>
               <th>JSON</th>
@@ -412,6 +413,7 @@
           cell(stock.exchange, 'market'),
           cell('---', 'value loading'),
           cell('---', 'value loading'),
+          cell('---', 'value loading'),
           cell('---', 'value loading')
         );
 
@@ -443,10 +445,13 @@
         valueCells[0].textContent = formatNumber(data.stockPrice, money);
 
         valueCells[1].className = 'value';
-        valueCells[1].textContent = formatNumber(data.marketCap, compact);
+        valueCells[1].textContent = data.currency || 'n/a';
 
         valueCells[2].className = 'value';
-        valueCells[2].textContent = formatNumber(data.peRatio, money);
+        valueCells[2].textContent = formatNumber(data.marketCap, compact);
+
+        valueCells[3].className = 'value';
+        valueCells[3].textContent = formatNumber(data.peRatio, money);
       } catch (err) {
         valueCells.forEach((td) => {
           td.className = 'value error';
