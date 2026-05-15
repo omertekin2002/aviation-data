@@ -31,20 +31,48 @@ jobs:
         run: |
           python <<'PY'
           import json
+          import math
           from pathlib import Path
 
           import yfinance as yf
 
           stocks = {
               "alk": "ALK",
+              "dal": "DAL",
+              "9201": "9201.T",
+              "lha": "LHA.DE",
+              "qan": "QAN.AX",
+              "ual": "UAL",
+              "aal": "AAL",
+              "ac": "AC.TO",
+              "airf": "AF.PA",
+              "sial": "C6L.SI",
+              "2618": "2618.TW",
+              "0753": "0753.HK",
+              "2610": "2610.TW",
+              "600115": "600115.SS",
+              "600029": "600029.SS",
+              "cpa": "CPA",
+              "ltm": "LTM",
+              "thai": "THAI.BK",
+              "algt": "ALGT",
+              "ezj": "EZJ.L",
+              "jblu": "JBLU",
+              "nas": "NAS.OL",
+              "rya": "RYA.IR",
+              "luv": "LUV",
+              "wizz": "WIZZ.L",
           }
 
           def clean_number(value, decimals=None):
               if value is None:
                   return None
+              value = float(value)
+              if not math.isfinite(value):
+                  return None
               if decimals is None:
                   return int(value)
-              return round(float(value), decimals)
+              return round(value, decimals)
 
           Path("data").mkdir(exist_ok=True)
 
@@ -62,13 +90,12 @@ jobs:
               market_cap = fast.get("market_cap") or info.get("marketCap")
               pe_ratio = info.get("trailingPE") or info.get("forwardPE")
 
-              if price is None or market_cap is None or pe_ratio is None:
+              if price is None or market_cap is None:
                   missing = [
                       name
                       for name, value in {
                           "stockPrice": price,
                           "marketCap": market_cap,
-                          "peRatio": pe_ratio,
                       }.items()
                       if value is None
                   ]
@@ -81,7 +108,7 @@ jobs:
               }
 
               path = Path("data") / f"{file_key}.json"
-              path.write_text(json.dumps(out, indent=2) + "\n")
+              path.write_text(json.dumps(out, indent=2, allow_nan=False) + "\n")
               print(f"{symbol}: ${out['stockPrice']} | market cap {out['marketCap']} | P/E {out['peRatio']}")
           PY
 
@@ -89,7 +116,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/alk.json
+          git add data/*.json
           git diff --staged --quiet || git commit -m "Update aviation stock data"
           git push
 

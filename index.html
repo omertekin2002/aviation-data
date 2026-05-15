@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Aviation Data / ALK</title>
+  <title>Aviation Data</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23101214'/%3E%3Cpath d='M32 7l5 22 17 8-2 5-16-3-4 18-4-18-16 3-2-5 17-8 5-22z' fill='%23f4b35b'/%3E%3C/svg%3E">
   <style>
     * {
@@ -22,7 +22,6 @@
       --subtle: #4f5755;
       --line: #2a302f;
       --accent: #f4b35b;
-      --runway: #ccd6cf;
       --danger: #d9736a;
     }
 
@@ -31,7 +30,7 @@
       background:
         linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px) 0 0 / 44px 44px,
         linear-gradient(180deg, rgba(255,255,255,0.018) 1px, transparent 1px) 0 0 / 44px 44px,
-        radial-gradient(circle at 78% 14%, rgba(244,179,91,0.08), transparent 28rem),
+        radial-gradient(circle at 80% 8%, rgba(244,179,91,0.08), transparent 28rem),
         var(--bg);
       color: var(--text);
       font-family: ui-monospace, "SF Mono", "Cascadia Code", "Consolas", monospace;
@@ -39,13 +38,13 @@
     }
 
     .shell {
-      width: min(760px, 100%);
+      width: min(1180px, 100%);
       margin: 0 auto;
     }
 
     header {
       display: grid;
-      grid-template-columns: 1fr auto;
+      grid-template-columns: minmax(0, 1fr) auto;
       gap: 1.5rem;
       align-items: start;
       padding-bottom: 1.5rem;
@@ -63,9 +62,9 @@
     h1 {
       color: var(--text);
       font-family: Georgia, "Times New Roman", serif;
-      font-size: clamp(2.4rem, 10vw, 5.8rem);
+      font-size: clamp(2.7rem, 9vw, 6.2rem);
       font-weight: 400;
-      line-height: 0.86;
+      line-height: 0.88;
       letter-spacing: 0;
     }
 
@@ -96,92 +95,126 @@
     .runway::after { bottom: 18px; }
 
     main {
-      margin-top: 2.75rem;
+      margin-top: 2.5rem;
     }
 
-    .stock {
+    .summary {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(18rem, 0.9fr);
-      gap: 2rem;
-      align-items: stretch;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 2rem;
     }
 
-    .identity {
-      padding: 1.25rem 0;
+    .summary div {
+      padding: 1rem 1.1rem;
+      border-right: 1px solid var(--line);
     }
 
-    .ticker {
-      display: inline-flex;
-      align-items: center;
-      min-height: 2.1rem;
-      padding: 0.25rem 0.7rem;
-      border: 1px solid var(--line);
-      color: var(--accent);
-      background: rgba(244,179,91,0.06);
-      font-size: 0.84rem;
+    .summary div:last-child {
+      border-right: 0;
     }
 
-    .name {
-      margin-top: 1rem;
-      color: var(--muted);
-      font-size: 0.92rem;
-      line-height: 1.7;
-      max-width: 28rem;
-    }
-
-    .json-link {
-      display: inline-block;
-      margin-top: 1.2rem;
+    .summary span {
+      display: block;
       color: var(--subtle);
-      font-size: 0.78rem;
-      text-decoration: underline;
-      text-underline-offset: 0.22rem;
+      font-size: 0.68rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 0.45rem;
     }
 
-    .metrics {
-      border-left: 1px solid var(--line);
-      background: linear-gradient(180deg, rgba(255,255,255,0.025), transparent);
+    .summary strong {
+      font-size: 1.25rem;
+      font-weight: 700;
     }
 
-    .metric {
-      display: grid;
-      gap: 0.55rem;
-      padding: 1.15rem 0 1.15rem 1.4rem;
+    .table-wrap {
+      overflow-x: auto;
+      border-top: 1px solid var(--line);
       border-bottom: 1px solid var(--line);
     }
 
-    .metric:last-child {
+    table {
+      width: 100%;
+      min-width: 860px;
+      border-collapse: collapse;
+    }
+
+    th,
+    td {
+      border-bottom: 1px solid var(--line);
+      padding: 0.82rem 0.75rem;
+      text-align: left;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+
+    th {
+      color: var(--subtle);
+      font-size: 0.68rem;
+      font-weight: 400;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      background: rgba(255,255,255,0.018);
+    }
+
+    tr:last-child td {
       border-bottom: 0;
     }
 
-    .label {
+    .ticker {
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    .company {
+      color: var(--muted);
+      white-space: normal;
+      min-width: 14rem;
+    }
+
+    .market {
       color: var(--subtle);
-      font-size: 0.72rem;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
+      max-width: 14rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .value {
-      min-height: 2.9rem;
       color: var(--text);
-      font-size: clamp(2rem, 7vw, 3.25rem);
+      font-size: 1.05rem;
       font-weight: 700;
-      line-height: 1;
-      overflow-wrap: anywhere;
     }
 
     .loading {
       color: var(--subtle);
+      font-weight: 400;
     }
 
     .error {
       color: var(--danger);
-      font-size: 1.15rem;
-      line-height: 1.35;
+      font-weight: 400;
+    }
+
+    a {
+      color: var(--subtle);
+      text-decoration: underline;
+      text-underline-offset: 0.22rem;
+    }
+
+    .data-links {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(5.5rem, 1fr));
+      gap: 0.35rem 0.75rem;
+      margin-top: 1.75rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--line);
+      font-size: 0.72rem;
     }
 
     footer {
-      margin-top: 3.25rem;
+      margin-top: 3rem;
       padding-top: 1rem;
       border-top: 1px solid var(--line);
       color: var(--subtle);
@@ -209,13 +242,13 @@
       color: var(--accent);
     }
 
-    @media (max-width: 660px) {
+    @media (max-width: 720px) {
       body {
         padding: 2rem 1rem;
       }
 
       header,
-      .stock {
+      .summary {
         grid-template-columns: 1fr;
       }
 
@@ -228,13 +261,13 @@
           var(--panel);
       }
 
-      .metrics {
-        border-left: 0;
-        border-top: 1px solid var(--line);
+      .summary div {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
       }
 
-      .metric {
-        padding-left: 0;
+      .summary div:last-child {
+        border-bottom: 0;
       }
     }
   </style>
@@ -243,100 +276,192 @@
   <div class="shell">
     <header>
       <div>
-        <div class="kicker">aviation data / nyse</div>
-        <h1>ALK</h1>
+        <div class="kicker">aviation data / global airlines</div>
+        <h1>Airline Equities</h1>
       </div>
       <div class="runway" aria-hidden="true"></div>
     </header>
 
     <main>
-      <section class="stock" data-stock="alk">
-        <div class="identity">
-          <div class="ticker">ALK · Alaska Air Group</div>
-          <p class="name">Alaska Air Group, Inc. trades on the NYSE. The displayed metrics are loaded from a standalone JSON file for direct parsing.</p>
-          <a class="json-link" href="data/alk.json">data/alk.json</a>
+      <section class="summary" aria-label="Dataset summary">
+        <div>
+          <span>tickers</span>
+          <strong id="stock-count">25</strong>
         </div>
-
-        <div class="metrics" aria-live="polite">
-          <div class="metric">
-            <div class="label">stock price</div>
-            <div class="value loading" data-role="stockPrice">---</div>
-          </div>
-          <div class="metric">
-            <div class="label">market cap</div>
-            <div class="value loading" data-role="marketCap">---</div>
-          </div>
-          <div class="metric">
-            <div class="label">p/e ratio</div>
-            <div class="value loading" data-role="peRatio">---</div>
-          </div>
+        <div>
+          <span>fields</span>
+          <strong>price / cap / p-e</strong>
+        </div>
+        <div>
+          <span>refresh</span>
+          <strong>every 30m</strong>
         </div>
       </section>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Ticker</th>
+              <th>Company / security</th>
+              <th>Exchange</th>
+              <th>Price</th>
+              <th>Market cap</th>
+              <th>P/E</th>
+              <th>JSON</th>
+            </tr>
+          </thead>
+          <tbody id="stock-body"></tbody>
+        </table>
+      </div>
+
+      <nav class="data-links" aria-label="Direct JSON files">
+        <a href="data/alk.json">ALK</a>
+        <a href="data/dal.json">DAL</a>
+        <a href="data/9201.json">9201</a>
+        <a href="data/lha.json">LHA</a>
+        <a href="data/qan.json">QAN</a>
+        <a href="data/ual.json">UAL</a>
+        <a href="data/aal.json">AAL</a>
+        <a href="data/ac.json">AC</a>
+        <a href="data/airf.json">AIRF</a>
+        <a href="data/sial.json">SIAL</a>
+        <a href="data/2618.json">2618</a>
+        <a href="data/0753.json">0753</a>
+        <a href="data/2610.json">2610</a>
+        <a href="data/600115.json">600115</a>
+        <a href="data/600029.json">600029</a>
+        <a href="data/cpa.json">CPA</a>
+        <a href="data/ltm.json">LTM</a>
+        <a href="data/thai.json">THAI</a>
+        <a href="data/algt.json">ALGT</a>
+        <a href="data/ezj.json">EZJ</a>
+        <a href="data/jblu.json">JBLU</a>
+        <a href="data/nas.json">NAS</a>
+        <a href="data/rya.json">RYA</a>
+        <a href="data/luv.json">LUV</a>
+        <a href="data/wizz.json">WIZZ</a>
+      </nav>
     </main>
 
     <footer>
       <span>data via Yahoo Finance using GitHub Actions</span>
-      <button type="button" onclick="loadStock()">refresh</button>
+      <button type="button" onclick="loadStocks()">refresh</button>
     </footer>
   </div>
 
   <script>
-    const fields = {
-      stockPrice: document.querySelector('[data-role="stockPrice"]'),
-      marketCap: document.querySelector('[data-role="marketCap"]'),
-      peRatio: document.querySelector('[data-role="peRatio"]'),
-    };
+    const stocks = [
+      { ticker: 'ALK', company: 'Alaska Air Group', exchange: 'NYSE', file: 'data/alk.json' },
+      { ticker: 'DAL', company: 'Delta Air Lines', exchange: 'NYSE', file: 'data/dal.json' },
+      { ticker: '9201', company: 'Japan Airlines', exchange: 'Tokyo Stock Exchange / TSE Prime', file: 'data/9201.json' },
+      { ticker: 'LHA', company: 'Deutsche Lufthansa', exchange: 'Xetra / Frankfurt', file: 'data/lha.json' },
+      { ticker: 'QAN', company: 'Qantas Airways', exchange: 'ASX', file: 'data/qan.json' },
+      { ticker: 'UAL', company: 'United Airlines Holdings', exchange: 'Nasdaq', file: 'data/ual.json' },
+      { ticker: 'AAL', company: 'American Airlines Group', exchange: 'Nasdaq', file: 'data/aal.json' },
+      { ticker: 'AC', company: 'Air Canada', exchange: 'Toronto Stock Exchange / TSX', file: 'data/ac.json' },
+      { ticker: 'AIRF', company: 'Air France-KLM', exchange: 'Euronext Paris', file: 'data/airf.json' },
+      { ticker: 'SIAL', company: 'Singapore Airlines', exchange: 'Singapore Exchange / SGX', file: 'data/sial.json' },
+      { ticker: '2618', company: 'EVA Airways', exchange: 'Taiwan Stock Exchange / TWSE', file: 'data/2618.json' },
+      { ticker: '0753', company: 'Air China H shares', exchange: 'Hong Kong Stock Exchange / HKEX', file: 'data/0753.json' },
+      { ticker: '2610', company: 'China Airlines', exchange: 'Taiwan Stock Exchange / TWSE', file: 'data/2610.json' },
+      { ticker: '600115', company: 'China Eastern Airlines A shares', exchange: 'Shanghai Stock Exchange / SSE', file: 'data/600115.json' },
+      { ticker: '600029', company: 'China Southern Airlines A shares', exchange: 'Shanghai Stock Exchange / SSE', file: 'data/600029.json' },
+      { ticker: 'CPA', company: 'Copa Holdings', exchange: 'NYSE', file: 'data/cpa.json' },
+      { ticker: 'LTM', company: 'LATAM Airlines Group ADR', exchange: 'NYSE', file: 'data/ltm.json' },
+      { ticker: 'THAI', company: 'Thai Airways International', exchange: 'Stock Exchange of Thailand / SET', file: 'data/thai.json' },
+      { ticker: 'ALGT', company: 'Allegiant Travel Company', exchange: 'Nasdaq', file: 'data/algt.json' },
+      { ticker: 'EZJ', company: 'easyJet', exchange: 'London Stock Exchange / LSE', file: 'data/ezj.json' },
+      { ticker: 'JBLU', company: 'JetBlue Airways', exchange: 'Nasdaq', file: 'data/jblu.json' },
+      { ticker: 'NAS', company: 'Norwegian Air Shuttle', exchange: 'Oslo Bors', file: 'data/nas.json' },
+      { ticker: 'RYA', company: 'Ryanair Holdings', exchange: 'Euronext Dublin', file: 'data/rya.json' },
+      { ticker: 'LUV', company: 'Southwest Airlines', exchange: 'NYSE', file: 'data/luv.json' },
+      { ticker: 'WIZZ', company: 'Wizz Air Holdings', exchange: 'London Stock Exchange / LSE', file: 'data/wizz.json' },
+    ];
 
+    const body = document.getElementById('stock-body');
     const money = new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
+      maximumFractionDigits: 2,
       minimumFractionDigits: 2,
+    });
+    const compact = new Intl.NumberFormat('en-US', {
+      notation: 'compact',
       maximumFractionDigits: 2,
     });
 
-    function compactNumber(value) {
-      return new Intl.NumberFormat('en-US', {
-        notation: 'compact',
-        maximumFractionDigits: 2,
-      }).format(value);
+    function cell(text, className) {
+      const td = document.createElement('td');
+      if (className) td.className = className;
+      td.textContent = text;
+      return td;
     }
 
-    function setLoading() {
-      Object.values(fields).forEach((el) => {
-        el.className = 'value loading';
-        el.textContent = '---';
+    function formatNumber(value, formatter) {
+      return typeof value === 'number' && Number.isFinite(value) ? formatter.format(value) : 'n/a';
+    }
+
+    function renderRows() {
+      body.innerHTML = '';
+
+      stocks.forEach((stock) => {
+        const row = document.createElement('tr');
+        row.dataset.file = stock.file;
+        row.append(
+          cell(stock.ticker, 'ticker'),
+          cell(stock.company, 'company'),
+          cell(stock.exchange, 'market'),
+          cell('---', 'value loading'),
+          cell('---', 'value loading'),
+          cell('---', 'value loading')
+        );
+
+        const jsonCell = document.createElement('td');
+        const link = document.createElement('a');
+        link.href = stock.file;
+        link.textContent = stock.file;
+        jsonCell.append(link);
+        row.append(jsonCell);
+        body.append(row);
       });
     }
 
-    function setError() {
-      Object.values(fields).forEach((el) => {
-        el.className = 'value error';
-        el.textContent = 'no data';
-      });
-    }
+    async function loadOne(stock) {
+      const row = body.querySelector('[data-file="' + stock.file + '"]');
+      const valueCells = row.querySelectorAll('.value');
 
-    async function loadStock() {
-      setLoading();
+      valueCells.forEach((td) => {
+        td.className = 'value loading';
+        td.textContent = '---';
+      });
 
       try {
-        const res = await fetch('data/alk.json', { cache: 'no-store' });
+        const res = await fetch(stock.file, { cache: 'no-store' });
         if (!res.ok) throw new Error('Missing data file');
-
         const data = await res.json();
-        fields.stockPrice.className = 'value';
-        fields.stockPrice.textContent = money.format(data.stockPrice);
 
-        fields.marketCap.className = 'value';
-        fields.marketCap.textContent = compactNumber(data.marketCap);
+        valueCells[0].className = 'value';
+        valueCells[0].textContent = formatNumber(data.stockPrice, money);
 
-        fields.peRatio.className = 'value';
-        fields.peRatio.textContent = Number(data.peRatio).toFixed(2);
+        valueCells[1].className = 'value';
+        valueCells[1].textContent = formatNumber(data.marketCap, compact);
+
+        valueCells[2].className = 'value';
+        valueCells[2].textContent = formatNumber(data.peRatio, money);
       } catch (err) {
-        setError();
+        valueCells.forEach((td) => {
+          td.className = 'value error';
+          td.textContent = 'no data';
+        });
       }
     }
 
-    loadStock();
+    function loadStocks() {
+      stocks.forEach(loadOne);
+    }
+
+    document.getElementById('stock-count').textContent = stocks.length;
+    renderRows();
+    loadStocks();
   </script>
 </body>
 </html>
