@@ -2,10 +2,8 @@ name: Update Stock Data & Deploy
 
 on:
   schedule:
-    # NYSE regular session is 14:30-21:00 UTC during standard time
-    # and 13:30-20:00 UTC during daylight saving time. This broader
-    # weekday window avoids stale data around DST boundaries.
-    - cron: '*/30 13-22 * * 1-5'
+    # Runs every 30 minutes, every day.
+    - cron: '*/30 * * * *'
   push:
     branches: [main]
   workflow_dispatch:
