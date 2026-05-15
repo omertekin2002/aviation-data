@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aviation Data / ALK</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23101214'/%3E%3Cpath d='M32 7l5 22 17 8-2 5-16-3-4 18-4-18-16 3-2-5 17-8 5-22z' fill='%23f4b35b'/%3E%3C/svg%3E">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      color-scheme: dark;
+      --bg: #101214;
+      --panel: #171a1d;
+      --panel-2: #1d2226;
+      --text: #ece7dc;
+      --muted: #8e958e;
+      --subtle: #4f5755;
+      --line: #2a302f;
+      --accent: #f4b35b;
+      --runway: #ccd6cf;
+      --danger: #d9736a;
+    }
+
+    body {
+      min-height: 100vh;
+      background:
+        linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px) 0 0 / 44px 44px,
+        linear-gradient(180deg, rgba(255,255,255,0.018) 1px, transparent 1px) 0 0 / 44px 44px,
+        radial-gradient(circle at 78% 14%, rgba(244,179,91,0.08), transparent 28rem),
+        var(--bg);
+      color: var(--text);
+      font-family: ui-monospace, "SF Mono", "Cascadia Code", "Consolas", monospace;
+      padding: 4rem 1.25rem;
+    }
+
+    .shell {
+      width: min(760px, 100%);
+      margin: 0 auto;
+    }
+
+    header {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 1.5rem;
+      align-items: start;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .kicker {
+      color: var(--accent);
+      font-size: 0.72rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 0.65rem;
+    }
+
+    h1 {
+      color: var(--text);
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(2.4rem, 10vw, 5.8rem);
+      font-weight: 400;
+      line-height: 0.86;
+      letter-spacing: 0;
+    }
+
+    .runway {
+      width: 112px;
+      min-height: 164px;
+      border: 1px solid var(--line);
+      background:
+        repeating-linear-gradient(180deg, transparent 0 14px, rgba(204,214,207,0.42) 14px 28px),
+        linear-gradient(90deg, transparent 47%, rgba(204,214,207,0.85) 47% 53%, transparent 53%),
+        var(--panel);
+      box-shadow: inset 0 0 0 8px rgba(255,255,255,0.015);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .runway::before,
+    .runway::after {
+      content: "";
+      position: absolute;
+      left: 18px;
+      right: 18px;
+      height: 1px;
+      background: var(--subtle);
+    }
+
+    .runway::before { top: 18px; }
+    .runway::after { bottom: 18px; }
+
+    main {
+      margin-top: 2.75rem;
+    }
+
+    .stock {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(18rem, 0.9fr);
+      gap: 2rem;
+      align-items: stretch;
+    }
+
+    .identity {
+      padding: 1.25rem 0;
+    }
+
+    .ticker {
+      display: inline-flex;
+      align-items: center;
+      min-height: 2.1rem;
+      padding: 0.25rem 0.7rem;
+      border: 1px solid var(--line);
+      color: var(--accent);
+      background: rgba(244,179,91,0.06);
+      font-size: 0.84rem;
+    }
+
+    .name {
+      margin-top: 1rem;
+      color: var(--muted);
+      font-size: 0.92rem;
+      line-height: 1.7;
+      max-width: 28rem;
+    }
+
+    .json-link {
+      display: inline-block;
+      margin-top: 1.2rem;
+      color: var(--subtle);
+      font-size: 0.78rem;
+      text-decoration: underline;
+      text-underline-offset: 0.22rem;
+    }
+
+    .metrics {
+      border-left: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255,255,255,0.025), transparent);
+    }
+
+    .metric {
+      display: grid;
+      gap: 0.55rem;
+      padding: 1.15rem 0 1.15rem 1.4rem;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .metric:last-child {
+      border-bottom: 0;
+    }
+
+    .label {
+      color: var(--subtle);
+      font-size: 0.72rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .value {
+      min-height: 2.9rem;
+      color: var(--text);
+      font-size: clamp(2rem, 7vw, 3.25rem);
+      font-weight: 700;
+      line-height: 1;
+      overflow-wrap: anywhere;
+    }
+
+    .loading {
+      color: var(--subtle);
+    }
+
+    .error {
+      color: var(--danger);
+      font-size: 1.15rem;
+      line-height: 1.35;
+    }
+
+    footer {
+      margin-top: 3.25rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--line);
+      color: var(--subtle);
+      font-size: 0.72rem;
+      line-height: 1.8;
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    button {
+      appearance: none;
+      border: 1px solid var(--line);
+      background: var(--panel-2);
+      color: var(--text);
+      font: inherit;
+      min-height: 2rem;
+      padding: 0.25rem 0.7rem;
+      cursor: pointer;
+    }
+
+    button:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    @media (max-width: 660px) {
+      body {
+        padding: 2rem 1rem;
+      }
+
+      header,
+      .stock {
+        grid-template-columns: 1fr;
+      }
+
+      .runway {
+        width: 100%;
+        min-height: 72px;
+        background:
+          linear-gradient(90deg, transparent 47%, rgba(204,214,207,0.85) 47% 53%, transparent 53%),
+          repeating-linear-gradient(90deg, transparent 0 14px, rgba(204,214,207,0.42) 14px 28px),
+          var(--panel);
+      }
+
+      .metrics {
+        border-left: 0;
+        border-top: 1px solid var(--line);
+      }
+
+      .metric {
+        padding-left: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <div>
+        <div class="kicker">aviation data / nyse</div>
+        <h1>ALK</h1>
+      </div>
+      <div class="runway" aria-hidden="true"></div>
+    </header>
+
+    <main>
+      <section class="stock" data-stock="alk">
+        <div class="identity">
+          <div class="ticker">ALK · Alaska Air Group</div>
+          <p class="name">Alaska Air Group, Inc. trades on the NYSE. The displayed metrics are loaded from a standalone JSON file for direct parsing.</p>
+          <a class="json-link" href="data/alk.json">data/alk.json</a>
+        </div>
+
+        <div class="metrics" aria-live="polite">
+          <div class="metric">
+            <div class="label">stock price</div>
+            <div class="value loading" data-role="stockPrice">---</div>
+          </div>
+          <div class="metric">
+            <div class="label">market cap</div>
+            <div class="value loading" data-role="marketCap">---</div>
+          </div>
+          <div class="metric">
+            <div class="label">p/e ratio</div>
+            <div class="value loading" data-role="peRatio">---</div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <span>data via Yahoo Finance using GitHub Actions</span>
+      <button type="button" onclick="loadStock()">refresh</button>
+    </footer>
+  </div>
+
+  <script>
+    const fields = {
+      stockPrice: document.querySelector('[data-role="stockPrice"]'),
+      marketCap: document.querySelector('[data-role="marketCap"]'),
+      peRatio: document.querySelector('[data-role="peRatio"]'),
+    };
+
+    const money = new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+
+    function compactNumber(value) {
+      return new Intl.NumberFormat('en-US', {
+        notation: 'compact',
+        maximumFractionDigits: 2,
+      }).format(value);
+    }
+
+    function setLoading() {
+      Object.values(fields).forEach((el) => {
+        el.className = 'value loading';
+        el.textContent = '---';
+      });
+    }
+
+    function setError() {
+      Object.values(fields).forEach((el) => {
+        el.className = 'value error';
+        el.textContent = 'no data';
+      });
+    }
+
+    async function loadStock() {
+      setLoading();
+
+      try {
+        const res = await fetch('data/alk.json', { cache: 'no-store' });
+        if (!res.ok) throw new Error('Missing data file');
+
+        const data = await res.json();
+        fields.stockPrice.className = 'value';
+        fields.stockPrice.textContent = money.format(data.stockPrice);
+
+        fields.marketCap.className = 'value';
+        fields.marketCap.textContent = compactNumber(data.marketCap);
+
+        fields.peRatio.className = 'value';
+        fields.peRatio.textContent = Number(data.peRatio).toFixed(2);
+      } catch (err) {
+        setError();
+      }
+    }
+
+    loadStock();
+  </script>
+</body>
+</html>

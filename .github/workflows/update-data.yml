@@ -1,0 +1,112 @@
+name: Update Stock Data & Deploy
+
+on:
+  schedule:
+    # NYSE regular session is 14:30-21:00 UTC during standard time
+    # and 13:30-20:00 UTC during daylight saving time. This broader
+    # weekday window avoids stale data around DST boundaries.
+    - cron: '*/30 13-22 * * 1-5'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  update-data:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install data dependencies
+        run: python -m pip install --upgrade yfinance
+
+      - name: Fetch stock data from Yahoo Finance
+        run: |
+          python <<'PY'
+          import json
+          from pathlib import Path
+
+          import yfinance as yf
+
+          stocks = {
+              "alk": "ALK",
+          }
+
+          def clean_number(value, decimals=None):
+              if value is None:
+                  return None
+              if decimals is None:
+                  return int(value)
+              return round(float(value), decimals)
+
+          Path("data").mkdir(exist_ok=True)
+
+          for file_key, symbol in stocks.items():
+              ticker = yf.Ticker(symbol)
+              fast = ticker.fast_info
+              info = ticker.get_info()
+
+              price = (
+                  fast.get("last_price")
+                  or info.get("currentPrice")
+                  or info.get("regularMarketPrice")
+                  or info.get("previousClose")
+              )
+              market_cap = fast.get("market_cap") or info.get("marketCap")
+              pe_ratio = info.get("trailingPE") or info.get("forwardPE")
+
+              if price is None or market_cap is None or pe_ratio is None:
+                  missing = [
+                      name
+                      for name, value in {
+                          "stockPrice": price,
+                          "marketCap": market_cap,
+                          "peRatio": pe_ratio,
+                      }.items()
+                      if value is None
+                  ]
+                  raise RuntimeError(f"{symbol} missing required fields: {', '.join(missing)}")
+
+              out = {
+                  "stockPrice": clean_number(price, 2),
+                  "marketCap": clean_number(market_cap),
+                  "peRatio": clean_number(pe_ratio, 2),
+              }
+
+              path = Path("data") / f"{file_key}.json"
+              path.write_text(json.dumps(out, indent=2) + "\n")
+              print(f"{symbol}: ${out['stockPrice']} | market cap {out['marketCap']} | P/E {out['peRatio']}")
+          PY
+
+      - name: Commit updated data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/alk.json
+          git diff --staged --quiet || git commit -m "Update aviation stock data"
+          git push
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+  deploy:
+    needs: update-data
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
