@@ -6,7 +6,13 @@ on:
     - cron: '*/30 * * * *'
   push:
     branches: [main]
+    paths-ignore:
+      - 'data/**'
   workflow_dispatch:
+
+concurrency:
+  group: update-stock-data-and-deploy
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -16,6 +22,7 @@ permissions:
 jobs:
   update-data:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -32,6 +39,8 @@ jobs:
           python <<'PY'
           import json
           import math
+          import time
+          import traceback
           from pathlib import Path
 
           import yfinance as yf
@@ -64,6 +73,9 @@ jobs:
               "wizz": "WIZZ.L",
           }
 
+          MAX_ATTEMPTS = 4
+          BASE_DELAY_SECONDS = 5
+
           def clean_number(value, decimals=None):
               if value is None:
                   return None
@@ -74,45 +86,149 @@ jobs:
                   return int(value)
               return round(value, decimals)
 
-          Path("data").mkdir(exist_ok=True)
+          def safe_get(mapping, key):
+              try:
+                  return mapping.get(key)
+              except Exception:
+                  return None
 
-          for file_key, symbol in stocks.items():
+          def first_valid_number(*values):
+              for value in values:
+                  try:
+                      cleaned = clean_number(value, 8)
+                  except (TypeError, ValueError, OverflowError):
+                      continue
+                  if cleaned is not None:
+                      return value
+              return None
+
+          def load_existing(path):
+              if not path.exists():
+                  return None
+              try:
+                  existing = json.loads(path.read_text())
+                  if not isinstance(existing.get("stockPrice"), (int, float)):
+                      return None
+                  if not isinstance(existing.get("currency"), str) or not existing["currency"]:
+                      return None
+                  if not isinstance(existing.get("marketCap"), int):
+                      return None
+                  pe_ratio = existing.get("peRatio")
+                  if pe_ratio is not None and not isinstance(pe_ratio, (int, float)):
+                      return None
+                  return existing
+              except (OSError, json.JSONDecodeError, AttributeError):
+                  return None
+
+          def fetch_symbol(symbol):
               ticker = yf.Ticker(symbol)
-              fast = ticker.fast_info
-              info = ticker.get_info()
 
-              price = (
-                  fast.get("last_price")
-                  or info.get("currentPrice")
-                  or info.get("regularMarketPrice")
-                  or info.get("previousClose")
+              fast = {}
+              try:
+                  fast = ticker.fast_info
+              except Exception as exc:
+                  print(f"::warning::{symbol}: fast_info failed: {exc}")
+
+              info = {}
+              try:
+                  info = ticker.get_info() or {}
+              except Exception as exc:
+                  print(f"::warning::{symbol}: get_info failed: {exc}")
+
+              history_price = None
+              try:
+                  history = ticker.history(period="5d", interval="1d", auto_adjust=False)
+                  if not history.empty:
+                      closes = history["Close"].dropna()
+                      if not closes.empty:
+                          history_price = closes.iloc[-1]
+              except Exception as exc:
+                  print(f"::warning::{symbol}: history fallback failed: {exc}")
+
+              price = first_valid_number(
+                  safe_get(fast, "last_price"),
+                  info.get("currentPrice"),
+                  info.get("regularMarketPrice"),
+                  info.get("previousClose"),
+                  history_price,
               )
-              market_cap = fast.get("market_cap") or info.get("marketCap")
-              pe_ratio = info.get("trailingPE") or info.get("forwardPE")
-              currency = info.get("currency") or fast.get("currency")
+              market_cap = first_valid_number(
+                  safe_get(fast, "market_cap"),
+                  info.get("marketCap"),
+              )
+              pe_ratio = first_valid_number(
+                  info.get("trailingPE"),
+                  info.get("forwardPE"),
+              )
+              currency = info.get("currency") or safe_get(fast, "currency")
 
-              if price is None or market_cap is None or currency is None:
-                  missing = [
-                      name
-                      for name, value in {
-                          "stockPrice": price,
-                          "marketCap": market_cap,
-                          "currency": currency,
-                      }.items()
-                      if value is None
-                  ]
-                  raise RuntimeError(f"{symbol} missing required fields: {', '.join(missing)}")
+              missing = [
+                  name
+                  for name, value in {
+                      "stockPrice": price,
+                      "marketCap": market_cap,
+                      "currency": currency,
+                  }.items()
+                  if value is None or value == ""
+              ]
+              if missing:
+                  raise RuntimeError(f"missing required fields: {', '.join(missing)}")
 
-              out = {
+              return {
                   "stockPrice": clean_number(price, 2),
-                  "currency": currency,
+                  "currency": str(currency),
                   "marketCap": clean_number(market_cap),
                   "peRatio": clean_number(pe_ratio, 2),
               }
 
-              path = Path("data") / f"{file_key}.json"
-              path.write_text(json.dumps(out, indent=2, allow_nan=False) + "\n")
-              print(f"{symbol}: {out['stockPrice']} {out['currency']} | market cap {out['marketCap']} | P/E {out['peRatio']}")
+          data_dir = Path("data")
+          data_dir.mkdir(exist_ok=True)
+          unrecoverable = []
+
+          for index, (file_key, symbol) in enumerate(stocks.items(), start=1):
+              path = data_dir / f"{file_key}.json"
+              existing = load_existing(path)
+              last_error = None
+
+              for attempt in range(1, MAX_ATTEMPTS + 1):
+                  try:
+                      out = fetch_symbol(symbol)
+                      path.write_text(
+                          json.dumps(out, indent=2, allow_nan=False) + "\n"
+                      )
+                      print(
+                          f"{symbol}: {out['stockPrice']} {out['currency']} | "
+                          f"market cap {out['marketCap']} | P/E {out['peRatio']}"
+                      )
+                      last_error = None
+                      break
+                  except Exception as exc:
+                      last_error = exc
+                      print(
+                          f"::warning::{symbol}: attempt {attempt}/{MAX_ATTEMPTS} "
+                          f"failed: {type(exc).__name__}: {exc}"
+                      )
+                      if attempt < MAX_ATTEMPTS:
+                          time.sleep(BASE_DELAY_SECONDS * attempt)
+              else:
+                  if existing is not None:
+                      print(
+                          f"::warning::{symbol}: all attempts failed; "
+                          f"keeping existing {path}"
+                      )
+                  else:
+                      unrecoverable.append(f"{symbol}: {last_error}")
+                      print(f"::error::{symbol}: no valid existing data is available")
+                      traceback.print_exception(last_error)
+
+              if index < len(stocks):
+                  time.sleep(1)
+
+          if unrecoverable:
+              raise RuntimeError(
+                  "Unable to update symbols without valid fallback data: "
+                  + "; ".join(unrecoverable)
+              )
           PY
 
       - name: Commit updated data
@@ -120,8 +236,13 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add data/*.json
-          git diff --staged --quiet || git commit -m "Update aviation stock data"
-          git push
+          if ! git diff --staged --quiet; then
+            git commit -m "Update aviation stock data"
+            git pull --rebase origin main
+            git push
+          else
+            echo "No stock-data changes to commit."
+          fi
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
