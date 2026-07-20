@@ -27,6 +27,11 @@ jobs:
           HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
+          failed_logs="$(gh run view "${RUN_ID}" --log-failed 2>&1 | tail -n 180)"
+          if [ -z "${failed_logs}" ]; then
+            failed_logs="Failed logs were not available through gh."
+          fi
+
           {
             echo "body<<EOF_REPORT"
             echo "The scheduled aviation data pull failed."
@@ -36,67 +41,73 @@ jobs:
             echo "Branch: ${HEAD_BRANCH}"
             echo "Commit: ${HEAD_SHA}"
             echo
-            echo "Please investigate and open a pull request that fixes the data updater. Keep the JSON contract intact for every file in data/:"
+            echo "Please investigate and fix the data updater while preserving the JSON contract used by external tools:"
             echo
             echo "- stockPrice: number"
             echo "- currency: quoted currency code string, for example USD or GBp"
             echo "- marketCap: integer"
             echo "- peRatio: number or null when unavailable/non-finite"
             echo
-            echo "Focus on .github/workflows/update-data.yml and any static data/schema changes needed to make the pull succeed again."
-            echo
             echo "Failed log excerpt:"
             echo '```text'
-            gh run view "${RUN_ID}" --log-failed 2>/dev/null | tail -n 180 || echo "Failed logs were not available through gh."
+            printf '%s\n' "${failed_logs}"
             echo '```'
             echo "EOF_REPORT"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Create issue and assign Copilot
-        if: ${{ env.COPILOT_AGENT_TOKEN != '' }}
+      - name: Create or update failure issue
         env:
-          GH_TOKEN: ${{ env.COPILOT_AGENT_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           ISSUE_BODY: ${{ steps.report.outputs.body }}
         run: |
-          issue_payload="$(jq -n \
-            --arg title "Fix failing aviation data pull" \
-            --arg body "$ISSUE_BODY" \
-            --arg repo "$GH_REPO" \
-            --arg branch "$DEFAULT_BRANCH" \
-            '{
-              title: $title,
-              body: $body,
-              assignees: ["copilot-swe-agent[bot]"],
-              agent_assignment: {
-                target_repo: $repo,
-                base_branch: $branch,
-                custom_instructions: "Fix the failing scheduled aviation data updater. Preserve the static GitHub Pages site and the JSON schema used by external tools. Run validation checks before opening the pull request.",
-                custom_agent: "",
-                model: ""
-              }
-            }')"
+          existing_issue="$(
+            gh issue list \
+              --repo "$GH_REPO" \
+              --state open \
+              --search '"Fix failing aviation data pull" in:title' \
+              --json number \
+              --jq '.[0].number // empty'
+          )"
 
-          gh api \
-            --method POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "/repos/${GH_REPO}/issues" \
-            --input - <<< "$issue_payload"
+          if [ -n "$existing_issue" ]; then
+            gh issue comment "$existing_issue" --repo "$GH_REPO" --body "$ISSUE_BODY"
+            exit 0
+          fi
 
-      - name: Create fallback issue
-        if: ${{ env.COPILOT_AGENT_TOKEN == '' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          ISSUE_BODY: ${{ steps.report.outputs.body }}
-        run: |
-          fallback_body="${ISSUE_BODY}
+          if [ -n "${COPILOT_AGENT_TOKEN}" ]; then
+            issue_payload="$(jq -n \
+              --arg title "Fix failing aviation data pull" \
+              --arg body "$ISSUE_BODY" \
+              --arg repo "$GH_REPO" \
+              --arg branch "$DEFAULT_BRANCH" \
+              '{
+                title: $title,
+                body: $body,
+                assignees: ["copilot-swe-agent[bot]"],
+                agent_assignment: {
+                  target_repo: $repo,
+                  base_branch: $branch,
+                  custom_instructions: "Fix the failing scheduled aviation data updater. Preserve the static GitHub Pages site and the JSON schema used by external tools. Run validation checks before opening the pull request.",
+                  custom_agent: "",
+                  model: ""
+                }
+              }')"
 
-          Note: COPILOT_AGENT_TOKEN is not configured, so this workflow could not assign the issue to Copilot automatically. Add a repository secret named COPILOT_AGENT_TOKEN using a user token that can assign Copilot coding agent to issues."
+            GH_TOKEN="$COPILOT_AGENT_TOKEN" gh api \
+              --method POST \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "/repos/${GH_REPO}/issues" \
+              --input - <<< "$issue_payload"
+          else
+            fallback_body="${ISSUE_BODY}
 
-          gh issue create \
-            --repo "$GH_REPO" \
-            --title "Fix failing aviation data pull" \
-            --body "$fallback_body"
+          Note: COPILOT_AGENT_TOKEN is not configured, so this workflow could not assign the issue to Copilot automatically."
+
+            gh issue create \
+              --repo "$GH_REPO" \
+              --title "Fix failing aviation data pull" \
+              --body "$fallback_body"
+          fi
