@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Aviation Data</title>
+  <meta name="description" content="Stock prices, market caps and P/E ratios for 25 listed airlines, refreshed every 30 minutes.">
+  <meta name="theme-color" content="#000000">
   <link rel="icon" href="favicon.ico?v=1" sizes="any">
   <link rel="icon" type="image/svg+xml" href="favicon.svg?v=1">
   <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png?v=1">
@@ -15,374 +17,1102 @@
     }
 
     :root {
-      color-scheme: dark;
-      --bg: #101214;
-      --panel: #171a1d;
-      --panel-2: #1d2226;
-      --text: #ece7dc;
-      --muted: #8e958e;
-      --subtle: #4f5755;
-      --line: #2a302f;
-      --accent: #f4b35b;
-      --danger: #d9736a;
+      color-scheme: light;
+
+      --primary: #e91d2a;
+      --on-primary: #ffffff;
+      --canvas: #ffffff;
+      --ink: #000000;
+      --frame-ink: #000000;
+      --yellow: #fcc20f;
+      --yellow-hi: #fff3c4;
+      --yellow-lo: #9c7600;
+      --purple: #6a26a4;
+      --link: #0000ee;
+
+      --tint-olive: #8e8a25;
+      --tint-sage: #b3bd95;
+      --tint-salmon: #d77a7a;
+      --tint-peach: #e6915d;
+      --tint-lime: #c0d4a7;
+      --tint-sky: #9ab6c8;
+      --tint-steel: #a5b8c0;
+      --tint-periwinkle: #8c9ae0;
+
+      --font-display: "Arial Black", "Arial Bold", Gadget, "Helvetica Neue", Helvetica, Arial, sans-serif;
+      --font-ui: Helvetica, "Helvetica Neue", Arial, sans-serif;
+      --font-body: "Times New Roman", Times, serif;
+      --font-code: "Courier New", Courier, monospace;
+
+      --frame-width: 8px;
+    }
+
+    html {
+      background: var(--canvas);
     }
 
     body {
-      min-height: 100vh;
-      background:
-        linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px) 0 0 / 44px 44px,
-        linear-gradient(180deg, rgba(255,255,255,0.018) 1px, transparent 1px) 0 0 / 44px 44px,
-        radial-gradient(circle at 80% 8%, rgba(244,179,91,0.08), transparent 28rem),
-        var(--bg);
-      color: var(--text);
-      font-family: ui-monospace, "SF Mono", "Cascadia Code", "Consolas", monospace;
-      padding: 4rem 1.25rem;
-    }
-
-    .shell {
-      width: min(1180px, 100%);
-      margin: 0 auto;
-    }
-
-    header {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      gap: 1.5rem;
-      align-items: start;
-      padding-bottom: 1.5rem;
-      border-bottom: 1px solid var(--line);
-    }
-
-    .kicker {
-      color: var(--accent);
-      font-size: 0.72rem;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      margin-bottom: 0.65rem;
-    }
-
-    h1 {
-      color: var(--text);
-      font-family: Georgia, "Times New Roman", serif;
-      font-size: clamp(2.7rem, 9vw, 6.2rem);
-      font-weight: 400;
-      line-height: 0.88;
-      letter-spacing: 0;
-    }
-
-    .runway {
-      width: 112px;
-      min-height: 164px;
-      border: 1px solid var(--line);
-      background:
-        repeating-linear-gradient(180deg, transparent 0 14px, rgba(204,214,207,0.42) 14px 28px),
-        linear-gradient(90deg, transparent 47%, rgba(204,214,207,0.85) 47% 53%, transparent 53%),
-        var(--panel);
-      box-shadow: inset 0 0 0 8px rgba(255,255,255,0.015);
-      position: relative;
-      overflow: hidden;
-    }
-
-    .runway::before,
-    .runway::after {
-      content: "";
-      position: absolute;
-      left: 18px;
-      right: 18px;
-      height: 1px;
-      background: var(--subtle);
-    }
-
-    .runway::before { top: 18px; }
-    .runway::after { bottom: 18px; }
-
-    main {
-      margin-top: 2.5rem;
-    }
-
-    .summary {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      border-top: 1px solid var(--line);
-      border-bottom: 1px solid var(--line);
-      margin-bottom: 2rem;
-    }
-
-    .summary div {
-      padding: 1rem 1.1rem;
-      border-right: 1px solid var(--line);
-    }
-
-    .summary div:last-child {
-      border-right: 0;
-    }
-
-    .summary span {
-      display: block;
-      color: var(--subtle);
-      font-size: 0.68rem;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      margin-bottom: 0.45rem;
-    }
-
-    .summary strong {
-      font-size: 1.25rem;
-      font-weight: 700;
-    }
-
-    .table-wrap {
-      overflow-x: auto;
-      border-top: 1px solid var(--line);
-      border-bottom: 1px solid var(--line);
-    }
-
-    table {
-      width: 100%;
-      min-width: 940px;
-      border-collapse: collapse;
-    }
-
-    th,
-    td {
-      border-bottom: 1px solid var(--line);
-      padding: 0.82rem 0.75rem;
-      text-align: left;
-      vertical-align: middle;
-      white-space: nowrap;
-    }
-
-    th {
-      color: var(--subtle);
-      font-size: 0.68rem;
-      font-weight: 400;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      background: rgba(255,255,255,0.018);
-    }
-
-    tr:last-child td {
-      border-bottom: 0;
-    }
-
-    .ticker {
-      color: var(--accent);
-      font-weight: 700;
-    }
-
-    .company {
-      color: var(--muted);
-      white-space: normal;
-      min-width: 14rem;
-    }
-
-    .market {
-      color: var(--subtle);
-      max-width: 14rem;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .value {
-      color: var(--text);
-      font-size: 1.05rem;
-      font-weight: 700;
-    }
-
-    .loading {
-      color: var(--subtle);
-      font-weight: 400;
-    }
-
-    .error {
-      color: var(--danger);
-      font-weight: 400;
+      background: var(--canvas);
+      color: var(--ink);
+      font: 400 14px/1.4 var(--font-body);
+      padding: 24px 16px 40px;
+      -webkit-text-size-adjust: 100%;
     }
 
     a {
-      color: var(--subtle);
+      color: var(--link);
+    }
+
+    a:visited {
+      color: var(--purple);
+    }
+
+    :focus-visible {
+      outline: 2px dotted var(--ink);
+      outline-offset: 2px;
+    }
+
+    code {
+      font-family: var(--font-code);
+      font-size: 13px;
+    }
+
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+    }
+
+    /* ---------- Page frame + top banner ---------- */
+
+    .frame {
+      max-width: 976px;
+      margin: 0 auto;
+      border: var(--frame-width) solid var(--frame-ink);
+      background: var(--canvas);
+    }
+
+    .banner {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px 24px;
+      padding: 12px 16px;
+      background: var(--frame-ink);
+      color: var(--canvas);
+    }
+
+    .banner-head {
+      font: 700 16px/1.2 var(--font-ui);
+      text-transform: uppercase;
+    }
+
+    .banner-sub {
+      margin-top: 2px;
+      font-size: 13px;
+    }
+
+    .banner-side {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 16px;
+    }
+
+    .sticker,
+    .sticker:visited {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      min-height: 32px;
+      padding: 4px 8px;
+      border: 1px solid var(--ink);
+      background: var(--yellow);
+      color: var(--ink);
+      box-shadow: inset 1px 1px 0 var(--yellow-hi), inset -1px -1px 0 var(--yellow-lo);
+      font: 700 12px/1 var(--font-ui);
+      text-decoration: none;
+      text-transform: uppercase;
+    }
+
+    .sticker-the {
+      padding: 2px 3px;
+      background: var(--purple);
+      color: var(--canvas);
+      font-size: 11px;
+      text-transform: lowercase;
+    }
+
+    .callout {
+      padding: 4px 8px;
+      color: var(--primary);
+      font: 700 16px/1.2 var(--font-ui);
+      text-transform: uppercase;
+    }
+
+    /* ---------- Two-column table layout ---------- */
+
+    .layout {
+      display: grid;
+      grid-template-columns: 232px minmax(0, 1fr);
+    }
+
+    .rail {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      padding: 16px;
+      border-right: 1px solid var(--frame-ink);
+    }
+
+    .main {
+      min-width: 0;
+      padding: 24px 24px 40px;
+    }
+
+    .wordmark,
+    .wordmark:visited {
+      display: inline-block;
+      color: var(--ink);
+      font-family: var(--font-display);
+      font-weight: 900;
+      font-size: 26px;
+      line-height: 1;
+      text-decoration: none;
+      text-transform: uppercase;
+    }
+
+    .wordmark span {
+      display: block;
+    }
+
+    .wordmark .wm-data {
+      display: inline-block;
+      margin-top: 3px;
+      padding: 2px 6px 4px;
+      background: var(--ink);
+      color: var(--canvas);
+    }
+
+    /* Icon-link grid */
+
+    .icon-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px;
+      padding: 8px 0;
+      border-top: 1px solid var(--frame-ink);
+      border-bottom: 1px solid var(--frame-ink);
+    }
+
+    .icon-link,
+    .icon-link:visited {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      min-height: 44px;
+      padding: 8px 4px;
+      color: var(--ink);
+      font: 700 12px/1.1 var(--font-ui);
+      text-align: center;
+      text-decoration: none;
+      text-transform: uppercase;
+    }
+
+    .icon-link:hover .icon-label {
       text-decoration: underline;
-      text-underline-offset: 0.22rem;
+    }
+
+    .tile {
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border: 1px solid var(--ink);
+      background: var(--tint, var(--canvas));
+      box-shadow: inset 1px 1px 0 var(--canvas), 2px 2px 0 var(--ink);
+    }
+
+    .px svg {
+      display: block;
+    }
+
+    /* Red CTA panel */
+
+    .cta {
+      position: relative;
+      padding: 16px;
+      border: 1px solid var(--frame-ink);
+      background: var(--primary);
+      color: var(--on-primary);
+    }
+
+    .cta p + p {
+      margin-top: 8px;
+    }
+
+    .cta .btn {
+      margin-top: 14px;
+    }
+
+    .status {
+      margin-top: 8px;
+      font-size: 12px;
+    }
+
+    .btn {
+      appearance: none;
+      min-height: 32px;
+      padding: 6px 16px;
+      border: 1px solid var(--frame-ink);
+      border-radius: 0;
+      background: var(--frame-ink);
+      color: var(--on-primary);
+      font: 700 12px/1 var(--font-ui);
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+
+    .btn:active {
+      transform: translate(1px, 1px);
+    }
+
+    .btn:disabled {
+      background: var(--canvas);
+      color: var(--ink);
+      cursor: progress;
+    }
+
+    /* ---------- Ribbon cards ---------- */
+
+    .ribbon {
+      position: relative;
+      border: 1px solid var(--frame-ink);
+    }
+
+    .ribbon-title {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 2px 10px;
+      padding: 6px 12px;
+      border-bottom: 1px solid var(--frame-ink);
+      background: var(--canvas);
+    }
+
+    .ribbon-title h2 {
+      font: 700 14px/1.2 var(--font-ui);
+      text-transform: uppercase;
+    }
+
+    .ribbon-meta {
+      font-size: 12px;
+    }
+
+    .ribbon-body {
+      container-type: inline-size;
+      padding: 12px 16px;
+      background: var(--tint, var(--canvas));
+    }
+
+    .pitch {
+      margin-bottom: 12px;
+    }
+
+    .has-photo {
+      background: var(--tint);
+    }
+
+    .has-photo .ribbon-title {
+      padding-right: 152px;
+    }
+
+    .has-photo .pitch {
+      min-height: 46px;
+      margin-right: 136px;
+    }
+
+    .has-burst .ribbon-title {
+      padding-right: 104px;
+    }
+
+    .has-burst .pitch {
+      margin-right: 76px;
+    }
+
+    /* Product-photo notch: a matted, hard-shadowed "GIF" pinned over the card edge */
+    .notch {
+      position: absolute;
+      top: -12px;
+      right: 16px;
+      padding: 2px;
+      border: 1px solid var(--ink);
+      background: var(--canvas);
+      box-shadow: 2px 2px 0 var(--ink);
+    }
+
+    .notch svg {
+      display: block;
+      width: 110px;
+      height: 70px;
+      background: var(--tint-sky);
+    }
+
+    .burst {
+      position: absolute;
+      top: -24px;
+      right: 14px;
+      width: 76px;
+      height: 76px;
+      transform: rotate(14deg);
+      filter: drop-shadow(2px 2px 0 var(--ink));
+    }
+
+    /* Rail "at a glance" card */
+
+    .facts dl {
+      display: grid;
+    }
+
+    .facts dl div {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 8px;
+      padding: 4px 0;
+      border-bottom: 1px solid var(--frame-ink);
+    }
+
+    .facts dl div:last-child {
+      border-bottom: 0;
+    }
+
+    .facts dt {
+      font: 700 12px/1.2 var(--font-ui);
+      text-transform: uppercase;
+    }
+
+    .facts dd {
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ---------- Main column ---------- */
+
+    .eyebrow {
+      position: relative;
+      padding: 24px 104px 24px 16px;
+      background: var(--tint-salmon);
+    }
+
+    .eyebrow h1 {
+      font: 900 36px/1 var(--font-display);
+      text-transform: uppercase;
+    }
+
+    .seal {
+      position: absolute;
+      top: 50%;
+      right: 20px;
+      width: 64px;
+      height: 64px;
+      transform: translateY(-50%) rotate(-8deg);
+      filter: drop-shadow(2px 2px 0 var(--ink));
+    }
+
+    .lede {
+      margin-top: 16px;
+      font: 700 16px/1.2 var(--font-ui);
+    }
+
+    .intro {
+      max-width: 62ch;
+      margin-top: 8px;
+    }
+
+    .regions {
+      display: grid;
+      gap: 40px;
+      margin-top: 44px;
+    }
+
+    /* Quote tables: white HTML tables nested inside the tinted card body */
+
+    .quotes {
+      width: 100%;
+      border: 1px solid var(--frame-ink);
+      border-collapse: collapse;
+      background: var(--canvas);
+    }
+
+    .quotes th {
+      padding: 6px 10px;
+      border-bottom: 1px solid var(--frame-ink);
+      font: 700 11px/1.2 var(--font-ui);
+      text-align: left;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .quotes td {
+      padding: 6px 10px;
+      border-bottom: 1px solid var(--frame-ink);
+      vertical-align: top;
+    }
+
+    .quotes tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .quotes .num {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .quotes .ticker {
+      font: 700 13px/1.4 var(--font-ui);
+      white-space: nowrap;
+    }
+
+    .quotes .cur {
+      font: 700 11px/1.75 var(--font-ui);
+      white-space: nowrap;
+    }
+
+    .exchange {
+      display: block;
+      font-size: 11px;
+      line-height: 1.35;
+    }
+
+    .cur-inline {
+      display: none;
+      font: 700 11px/1 var(--font-ui);
+    }
+
+    .loading {
+      letter-spacing: 1px;
+    }
+
+    .nodata {
+      font-style: italic;
     }
 
     .data-links {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(5.5rem, 1fr));
-      gap: 0.35rem 0.75rem;
-      margin-top: 1.75rem;
-      padding-top: 1rem;
-      border-top: 1px solid var(--line);
-      font-size: 0.72rem;
+      grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+      gap: 4px 12px;
+      padding: 10px 12px;
+      border: 1px solid var(--frame-ink);
+      background: var(--canvas);
     }
 
-    footer {
-      margin-top: 3rem;
-      padding-top: 1rem;
-      border-top: 1px solid var(--line);
-      color: var(--subtle);
-      font-size: 0.72rem;
-      line-height: 1.8;
+    .data-links a {
+      padding: 2px 0;
+    }
+
+    /* Quote tables respond to the width of their card, not the window */
+
+    @container (max-width: 600px) {
+      .quotes .file {
+        display: none;
+      }
+    }
+
+    @container (max-width: 470px) {
+      .quotes thead {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+      }
+
+      .quotes,
+      .quotes tbody {
+        display: block;
+      }
+
+      .quotes tr {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 6px 10px;
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--frame-ink);
+      }
+
+      .quotes tr:last-child {
+        border-bottom: 0;
+      }
+
+      .quotes td {
+        display: block;
+        padding: 0;
+        border: 0;
+      }
+
+      .quotes .airline {
+        grid-column: 2 / -1;
+      }
+
+      .quotes .cur,
+      .quotes .file {
+        display: none;
+      }
+
+      .quotes .num {
+        text-align: left;
+      }
+
+      .quotes .num::before {
+        content: attr(data-label);
+        display: block;
+        margin-bottom: 2px;
+        font: 700 10px/1.2 var(--font-ui);
+        text-transform: uppercase;
+      }
+
+      .cur-inline {
+        display: inline;
+      }
+    }
+
+    /* ---------- Footer band ---------- */
+
+    .footer {
+      padding: 16px 16px 20px;
+      border-top: 1px solid var(--frame-ink);
+      font-size: 12px;
+      text-align: center;
+    }
+
+    .iconnav {
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      max-width: 560px;
+      margin: 0 auto 14px;
+    }
+
+    .iconnav::before {
+      content: "";
+      position: absolute;
+      top: 19px;
+      left: 12.5%;
+      right: 12.5%;
+      height: 2px;
+      background: var(--tint-olive);
+    }
+
+    .iconnav a,
+    .iconnav a:visited,
+    .iconnav button {
+      position: relative;
       display: flex;
-      justify-content: space-between;
-      gap: 1rem;
-      flex-wrap: wrap;
-    }
-
-    button {
-      appearance: none;
-      border: 1px solid var(--line);
-      background: var(--panel-2);
-      color: var(--text);
-      font: inherit;
-      min-height: 2rem;
-      padding: 0.25rem 0.7rem;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      min-height: 44px;
+      padding: 8px 4px;
+      border: 0;
+      background: none;
+      color: var(--ink);
+      font: 700 12px/1.1 var(--font-ui);
+      text-decoration: none;
+      text-transform: uppercase;
       cursor: pointer;
     }
 
-    button:hover {
-      border-color: var(--accent);
-      color: var(--accent);
+    .iconnav a:hover span:last-child,
+    .iconnav button:hover span:last-child {
+      text-decoration: underline;
     }
 
-    @media (max-width: 720px) {
+    .iconnav button:disabled {
+      cursor: progress;
+    }
+
+    .iconnav .px {
+      display: grid;
+      place-items: center;
+      height: 24px;
+      padding: 0 8px;
+      background: var(--canvas);
+    }
+
+    .footer p + p {
+      margin-top: 4px;
+    }
+
+    .fineprint {
+      font-size: 11px;
+      line-height: 1.35;
+    }
+
+    @media (max-width: 960px) {
+      .layout {
+        grid-template-columns: 200px minmax(0, 1fr);
+      }
+
+      .rail {
+        padding: 16px 12px;
+      }
+    }
+
+    /* ---------- Tablet: frame compresses, rail stacks above the product stack ---------- */
+
+    @media (max-width: 768px) {
+      :root {
+        --frame-width: 4px;
+      }
+
       body {
-        padding: 2rem 1rem;
+        padding: 12px 8px 24px;
       }
 
-      header,
-      .summary {
-        grid-template-columns: 1fr;
+      .banner-head {
+        font-size: 14px;
       }
 
-      .runway {
+      .layout {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .rail {
+        display: contents;
+      }
+
+      .rail > * {
+        margin: 0 16px;
+      }
+
+      .rail > :first-child {
+        margin-top: 16px;
+      }
+
+      .icon-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        margin-top: 12px;
+      }
+
+      .main {
+        padding: 24px 16px 32px;
+      }
+
+      .cta,
+      .facts {
+        order: 2;
+        margin-bottom: 24px;
+      }
+    }
+
+    /* ---------- Phone: photo notch becomes a full-width strip ---------- */
+
+    @media (max-width: 600px) {
+      .eyebrow {
+        padding: 20px 88px 20px 12px;
+      }
+
+      .eyebrow h1 {
+        font-size: 30px;
+      }
+
+      .seal {
+        right: 12px;
+      }
+
+      .regions {
+        gap: 32px;
+      }
+
+      .ribbon-body {
+        padding: 12px;
+      }
+
+      .has-photo .ribbon-title {
+        padding-right: 12px;
+      }
+
+      .has-photo .pitch {
+        min-height: 0;
+        margin-right: 0;
+      }
+
+      .has-photo .notch {
+        position: static;
+        margin: 12px 12px 0;
+        box-shadow: none;
+      }
+
+      .has-photo .notch svg {
         width: 100%;
-        min-height: 72px;
-        background:
-          linear-gradient(90deg, transparent 47%, rgba(204,214,207,0.85) 47% 53%, transparent 53%),
-          repeating-linear-gradient(90deg, transparent 0 14px, rgba(204,214,207,0.42) 14px 28px),
-          var(--panel);
+        height: 72px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      :root {
+        --frame-width: 2px;
       }
 
-      .summary div {
-        border-right: 0;
-        border-bottom: 1px solid var(--line);
+      .banner-side {
+        width: 100%;
       }
 
-      .summary div:last-child {
-        border-bottom: 0;
+      .callout {
+        padding-left: 0;
+        font-size: 14px;
       }
     }
   </style>
 </head>
-<body>
-  <div class="shell">
-    <header>
+<body id="top">
+  <div class="frame">
+    <header class="banner">
       <div>
-        <div class="kicker">aviation data / global airlines</div>
-        <h1>Airline Equities</h1>
+        <p class="banner-head">Track <span data-stat="count">25</span> airline stocks. Online.</p>
+        <p class="banner-sub">Price, currency, market cap and P/E from <span data-stat="exchanges">15</span> stock exchanges.</p>
       </div>
-      <div class="runway" aria-hidden="true"></div>
+      <div class="banner-side">
+        <a class="sticker" href="#json">Get <span class="sticker-the">the</span> JSON</a>
+        <p class="callout">Updated every 30 min</p>
+      </div>
     </header>
 
-    <main>
-      <section class="summary" aria-label="Dataset summary">
-        <div>
-          <span>tickers</span>
-          <strong id="stock-count">25</strong>
-        </div>
-        <div>
-          <span>fields</span>
-          <strong>price / currency / cap / p-e</strong>
-        </div>
-        <div>
-          <span>refresh</span>
-          <strong>every 30m</strong>
-        </div>
-      </section>
+    <div class="layout">
+      <div class="rail">
+        <a class="wordmark" href="#top" aria-label="Aviation Data, back to top">
+          <span>Aviation</span>
+          <span class="wm-data">Data</span>
+        </a>
 
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Ticker</th>
-              <th>Company / security</th>
-              <th>Exchange</th>
-              <th>Price</th>
-              <th>Currency</th>
-              <th>Market cap</th>
-              <th>P/E</th>
-              <th>JSON</th>
-            </tr>
-          </thead>
-          <tbody id="stock-body"></tbody>
-        </table>
+        <nav class="icon-grid" id="icon-grid" aria-label="Sections">
+          <a class="icon-link" href="#json">
+            <span class="tile" style="--tint: var(--yellow)"><span class="px" data-art="floppy"></span></span>
+            <span class="icon-label">Raw JSON</span>
+          </a>
+          <a class="icon-link" href="https://github.com/omertekin2002/aviation-data">
+            <span class="tile"><span class="px" data-art="doc"></span></span>
+            <span class="icon-label">Source</span>
+          </a>
+        </nav>
+
+        <section class="cta" aria-label="About this data">
+          <p>At Aviation Data, we'll help you follow <strong data-stat="count">25</strong> listed airlines across <strong data-stat="exchanges">15</strong> stock exchanges &mdash; share price, market cap and P/E ratio, each in the carrier's home currency.</p>
+          <p>Figures come from Yahoo Finance by way of GitHub Actions and are refreshed every 30 minutes.</p>
+          <button class="btn" type="button" data-refresh>Refresh prices</button>
+          <p class="status" id="status" role="status">Loading prices&hellip;</p>
+        </section>
+
+        <section class="ribbon facts" style="--tint: var(--tint-lime)" aria-labelledby="facts-title">
+          <div class="ribbon-title"><h2 id="facts-title">At a glance</h2></div>
+          <div class="ribbon-body">
+            <dl>
+              <div><dt>Tickers</dt><dd data-stat="count">25</dd></div>
+              <div><dt>Exchanges</dt><dd data-stat="exchanges">15</dd></div>
+              <div><dt>Currencies</dt><dd id="currency-count">&mdash;</dd></div>
+              <div><dt>Refresh</dt><dd>30 min</dd></div>
+            </dl>
+          </div>
+        </section>
       </div>
 
-      <nav class="data-links" aria-label="Direct JSON files">
-        <a href="data/alk.json">ALK</a>
-        <a href="data/dal.json">DAL</a>
-        <a href="data/9201.json">9201</a>
-        <a href="data/lha.json">LHA</a>
-        <a href="data/qan.json">QAN</a>
-        <a href="data/ual.json">UAL</a>
-        <a href="data/aal.json">AAL</a>
-        <a href="data/ac.json">AC</a>
-        <a href="data/airf.json">AIRF</a>
-        <a href="data/sial.json">SIAL</a>
-        <a href="data/2618.json">2618</a>
-        <a href="data/0753.json">0753</a>
-        <a href="data/2610.json">2610</a>
-        <a href="data/600115.json">600115</a>
-        <a href="data/600029.json">600029</a>
-        <a href="data/cpa.json">CPA</a>
-        <a href="data/ltm.json">LTM</a>
-        <a href="data/thai.json">THAI</a>
-        <a href="data/algt.json">ALGT</a>
-        <a href="data/ezj.json">EZJ</a>
-        <a href="data/jblu.json">JBLU</a>
-        <a href="data/nas.json">NAS</a>
-        <a href="data/rya.json">RYA</a>
-        <a href="data/luv.json">LUV</a>
-        <a href="data/wizz.json">WIZZ</a>
-      </nav>
-    </main>
+      <main class="main" id="main">
+        <div class="eyebrow">
+          <h1>Airline Equities</h1>
+          <svg class="seal" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+            <circle cx="32" cy="32" r="31.5" fill="#e91d2a" stroke="#000"/>
+            <circle cx="32" cy="32" r="27.5" fill="none" stroke="#fff" stroke-dasharray="2 2"/>
+            <circle cx="32" cy="32" r="23.5" fill="#fff" stroke="#000"/>
+            <text x="32" y="36" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="18" data-stat="count">25</text>
+            <text x="32" y="45" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-weight="700" font-size="6.5">CARRIERS</text>
+          </svg>
+        </div>
 
-    <footer>
-      <span>data via Yahoo Finance using GitHub Actions</span>
-      <button type="button" onclick="loadStocks()">refresh</button>
+        <p class="lede">Share prices, market caps and P/E ratios for the world's listed airlines.</p>
+        <p class="intro">Every row below is read straight from a JSON file in this repository. Prices and market caps are quoted in each listing's trading currency &mdash; London listings in pence &mdash; so convert before you compare across markets.</p>
+
+        <noscript><p class="intro"><strong>JavaScript is needed to load prices.</strong> The raw JSON files are linked below.</p></noscript>
+
+        <div class="regions" id="regions">
+          <section class="ribbon has-burst" id="json" style="--tint: var(--tint-steel)" aria-labelledby="json-title">
+            <div class="ribbon-title"><h2 id="json-title">Raw JSON files</h2><span class="ribbon-meta">25 files</span></div>
+            <svg class="burst" viewBox="0 0 80 80" aria-hidden="true" focusable="false">
+              <polygon points="40.0,2.0 46.5,11.7 56.5,5.8 58.1,17.3 69.7,16.3 66.1,27.4 77.0,31.5 69.0,40.0 77.0,48.5 66.1,52.6 69.7,63.7 58.1,62.7 56.5,74.2 46.5,68.3 40.0,78.0 33.5,68.3 23.5,74.2 21.9,62.7 10.3,63.7 13.9,52.6 3.0,48.5 11.0,40.0 3.0,31.5 13.9,27.4 10.3,16.3 21.9,17.3 23.5,5.8 33.5,11.7" fill="#fcc20f" stroke="#000"/>
+              <text x="40" y="45" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-weight="700" font-size="15">FREE!</text>
+            </svg>
+            <div class="ribbon-body">
+              <p class="pitch">One file per ticker, rewritten every half hour. Each holds four fields: <code>stockPrice</code>, <code>currency</code>, <code>marketCap</code> and <code>peRatio</code>.</p>
+              <nav class="data-links" aria-label="Direct JSON files">
+                <a href="data/alk.json">alk.json</a>
+                <a href="data/dal.json">dal.json</a>
+                <a href="data/9201.json">9201.json</a>
+                <a href="data/lha.json">lha.json</a>
+                <a href="data/qan.json">qan.json</a>
+                <a href="data/ual.json">ual.json</a>
+                <a href="data/aal.json">aal.json</a>
+                <a href="data/ac.json">ac.json</a>
+                <a href="data/airf.json">airf.json</a>
+                <a href="data/sial.json">sial.json</a>
+                <a href="data/2618.json">2618.json</a>
+                <a href="data/0753.json">0753.json</a>
+                <a href="data/2610.json">2610.json</a>
+                <a href="data/600115.json">600115.json</a>
+                <a href="data/600029.json">600029.json</a>
+                <a href="data/cpa.json">cpa.json</a>
+                <a href="data/ltm.json">ltm.json</a>
+                <a href="data/thai.json">thai.json</a>
+                <a href="data/algt.json">algt.json</a>
+                <a href="data/ezj.json">ezj.json</a>
+                <a href="data/jblu.json">jblu.json</a>
+                <a href="data/nas.json">nas.json</a>
+                <a href="data/rya.json">rya.json</a>
+                <a href="data/luv.json">luv.json</a>
+                <a href="data/wizz.json">wizz.json</a>
+              </nav>
+            </div>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <footer class="footer">
+      <nav class="iconnav" aria-label="Footer">
+        <a href="#top"><span class="px" data-art="arrowUp"></span><span>Top</span></a>
+        <button type="button" data-refresh><span class="px" data-art="clock"></span><span>Refresh</span></button>
+        <a href="#json"><span class="px" data-art="floppy"></span><span>Raw JSON</span></a>
+        <a href="https://github.com/omertekin2002/aviation-data"><span class="px" data-art="doc"></span><span>Source</span></a>
+      </nav>
+      <p>&copy; <span id="year">2026</span> Aviation Data &middot; <a href="https://github.com/omertekin2002/aviation-data">Source on GitHub</a> (Data via Yahoo Finance. Figures may be delayed and are not investment advice.)</p>
+      <p class="fineprint">This site is best viewed with browser versions 3.0 and higher.</p>
     </footer>
   </div>
 
+  <template id="region-template">
+    <section class="ribbon has-photo">
+      <div class="ribbon-title"><h2></h2><span class="ribbon-meta"></span></div>
+      <div class="notch"></div>
+      <div class="ribbon-body">
+        <p class="pitch"></p>
+        <table class="quotes">
+          <thead>
+            <tr>
+              <th scope="col">Ticker</th>
+              <th scope="col">Airline</th>
+              <th scope="col" class="num">Price</th>
+              <th scope="col">Cur.</th>
+              <th scope="col" class="num">Mkt cap</th>
+              <th scope="col" class="num">P/E</th>
+              <th scope="col">File</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </template>
+
   <script>
-    const stocks = [
-      { ticker: 'ALK', company: 'Alaska Air Group', exchange: 'NYSE', file: 'data/alk.json' },
-      { ticker: 'DAL', company: 'Delta Air Lines', exchange: 'NYSE', file: 'data/dal.json' },
-      { ticker: '9201', company: 'Japan Airlines', exchange: 'Tokyo Stock Exchange / TSE Prime', file: 'data/9201.json' },
-      { ticker: 'LHA', company: 'Deutsche Lufthansa', exchange: 'Xetra / Frankfurt', file: 'data/lha.json' },
-      { ticker: 'QAN', company: 'Qantas Airways', exchange: 'ASX', file: 'data/qan.json' },
-      { ticker: 'UAL', company: 'United Airlines Holdings', exchange: 'Nasdaq', file: 'data/ual.json' },
-      { ticker: 'AAL', company: 'American Airlines Group', exchange: 'Nasdaq', file: 'data/aal.json' },
-      { ticker: 'AC', company: 'Air Canada', exchange: 'Toronto Stock Exchange / TSX', file: 'data/ac.json' },
-      { ticker: 'AIRF', company: 'Air France-KLM', exchange: 'Euronext Paris', file: 'data/airf.json' },
-      { ticker: 'SIAL', company: 'Singapore Airlines', exchange: 'Singapore Exchange / SGX', file: 'data/sial.json' },
-      { ticker: '2618', company: 'EVA Airways', exchange: 'Taiwan Stock Exchange / TWSE', file: 'data/2618.json' },
-      { ticker: '0753', company: 'Air China H shares', exchange: 'Hong Kong Stock Exchange / HKEX', file: 'data/0753.json' },
-      { ticker: '2610', company: 'China Airlines', exchange: 'Taiwan Stock Exchange / TWSE', file: 'data/2610.json' },
-      { ticker: '600115', company: 'China Eastern Airlines A shares', exchange: 'Shanghai Stock Exchange / SSE', file: 'data/600115.json' },
-      { ticker: '600029', company: 'China Southern Airlines A shares', exchange: 'Shanghai Stock Exchange / SSE', file: 'data/600029.json' },
-      { ticker: 'CPA', company: 'Copa Holdings', exchange: 'NYSE', file: 'data/cpa.json' },
-      { ticker: 'LTM', company: 'LATAM Airlines Group ADR', exchange: 'NYSE', file: 'data/ltm.json' },
-      { ticker: 'THAI', company: 'Thai Airways International', exchange: 'Stock Exchange of Thailand / SET', file: 'data/thai.json' },
-      { ticker: 'ALGT', company: 'Allegiant Travel Company', exchange: 'Nasdaq', file: 'data/algt.json' },
-      { ticker: 'EZJ', company: 'easyJet', exchange: 'London Stock Exchange / LSE', file: 'data/ezj.json' },
-      { ticker: 'JBLU', company: 'JetBlue Airways', exchange: 'Nasdaq', file: 'data/jblu.json' },
-      { ticker: 'NAS', company: 'Norwegian Air Shuttle', exchange: 'Oslo Bors', file: 'data/nas.json' },
-      { ticker: 'RYA', company: 'Ryanair Holdings', exchange: 'Euronext Dublin', file: 'data/rya.json' },
-      { ticker: 'LUV', company: 'Southwest Airlines', exchange: 'NYSE', file: 'data/luv.json' },
-      { ticker: 'WIZZ', company: 'Wizz Air Holdings', exchange: 'London Stock Exchange / LSE', file: 'data/wizz.json' },
+    const regions = [
+      {
+        id: 'north-america',
+        name: 'North America',
+        short: 'N. America',
+        tint: '--tint-sage',
+        pitch: 'The U.S. majors, the low-cost challengers and Canada’s flag carrier, traded on the NYSE, Nasdaq and the TSX.',
+      },
+      {
+        id: 'latin-america',
+        name: 'Latin America',
+        short: 'Latin America',
+        tint: '--tint-peach',
+        pitch: 'Panama’s Copa and Chile’s LATAM, both listed in New York and priced in U.S. dollars.',
+      },
+      {
+        id: 'europe',
+        name: 'Europe',
+        short: 'Europe',
+        tint: '--tint-periwinkle',
+        pitch: 'Network carriers and low-cost specialists from Frankfurt, Paris, London, Oslo and Dublin.',
+      },
+      {
+        id: 'asia-pacific',
+        name: 'Asia-Pacific',
+        short: 'Asia-Pacific',
+        tint: '--tint-sky',
+        livery: '--tint-olive',
+        pitch: 'From Tokyo to Sydney, including H shares in Hong Kong and A shares in Shanghai, each priced in its home currency.',
+      },
     ];
 
-    const body = document.getElementById('stock-body');
+    const stocks = [
+      { ticker: 'ALK', company: 'Alaska Air Group', exchange: 'NYSE', region: 'north-america', file: 'data/alk.json' },
+      { ticker: 'DAL', company: 'Delta Air Lines', exchange: 'NYSE', region: 'north-america', file: 'data/dal.json' },
+      { ticker: '9201', company: 'Japan Airlines', exchange: 'Tokyo Stock Exchange / TSE Prime', region: 'asia-pacific', file: 'data/9201.json' },
+      { ticker: 'LHA', company: 'Deutsche Lufthansa', exchange: 'Xetra / Frankfurt', region: 'europe', file: 'data/lha.json' },
+      { ticker: 'QAN', company: 'Qantas Airways', exchange: 'ASX', region: 'asia-pacific', file: 'data/qan.json' },
+      { ticker: 'UAL', company: 'United Airlines Holdings', exchange: 'Nasdaq', region: 'north-america', file: 'data/ual.json' },
+      { ticker: 'AAL', company: 'American Airlines Group', exchange: 'Nasdaq', region: 'north-america', file: 'data/aal.json' },
+      { ticker: 'AC', company: 'Air Canada', exchange: 'Toronto Stock Exchange / TSX', region: 'north-america', file: 'data/ac.json' },
+      { ticker: 'AIRF', company: 'Air France-KLM', exchange: 'Euronext Paris', region: 'europe', file: 'data/airf.json' },
+      { ticker: 'SIAL', company: 'Singapore Airlines', exchange: 'Singapore Exchange / SGX', region: 'asia-pacific', file: 'data/sial.json' },
+      { ticker: '2618', company: 'EVA Airways', exchange: 'Taiwan Stock Exchange / TWSE', region: 'asia-pacific', file: 'data/2618.json' },
+      { ticker: '0753', company: 'Air China H shares', exchange: 'Hong Kong Stock Exchange / HKEX', region: 'asia-pacific', file: 'data/0753.json' },
+      { ticker: '2610', company: 'China Airlines', exchange: 'Taiwan Stock Exchange / TWSE', region: 'asia-pacific', file: 'data/2610.json' },
+      { ticker: '600115', company: 'China Eastern Airlines A shares', exchange: 'Shanghai Stock Exchange / SSE', region: 'asia-pacific', file: 'data/600115.json' },
+      { ticker: '600029', company: 'China Southern Airlines A shares', exchange: 'Shanghai Stock Exchange / SSE', region: 'asia-pacific', file: 'data/600029.json' },
+      { ticker: 'CPA', company: 'Copa Holdings', exchange: 'NYSE', region: 'latin-america', file: 'data/cpa.json' },
+      { ticker: 'LTM', company: 'LATAM Airlines Group ADR', exchange: 'NYSE', region: 'latin-america', file: 'data/ltm.json' },
+      { ticker: 'THAI', company: 'Thai Airways International', exchange: 'Stock Exchange of Thailand / SET', region: 'asia-pacific', file: 'data/thai.json' },
+      { ticker: 'ALGT', company: 'Allegiant Travel Company', exchange: 'Nasdaq', region: 'north-america', file: 'data/algt.json' },
+      { ticker: 'EZJ', company: 'easyJet', exchange: 'London Stock Exchange / LSE', region: 'europe', file: 'data/ezj.json' },
+      { ticker: 'JBLU', company: 'JetBlue Airways', exchange: 'Nasdaq', region: 'north-america', file: 'data/jblu.json' },
+      { ticker: 'NAS', company: 'Norwegian Air Shuttle', exchange: 'Oslo Bors', region: 'europe', file: 'data/nas.json' },
+      { ticker: 'RYA', company: 'Ryanair Holdings', exchange: 'Euronext Dublin', region: 'europe', file: 'data/rya.json' },
+      { ticker: 'LUV', company: 'Southwest Airlines', exchange: 'NYSE', region: 'north-america', file: 'data/luv.json' },
+      { ticker: 'WIZZ', company: 'Wizz Air Holdings', exchange: 'London Stock Exchange / LSE', region: 'europe', file: 'data/wizz.json' },
+    ];
+
+    // Pixel art, drawn one character per pixel. '.' is transparent; other letters map to palette tokens.
+    const art = {
+      planeSide: [
+        '..KKK...............................',
+        '..KTTK..............................',
+        '..KTTTK.............................',
+        '..KTTTTK............................',
+        '..KTTTTTK...........................',
+        '..KTTTTTTKKKKKKKKKKKKKKKKKKKKKKK....',
+        '.KWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWK...',
+        'KWWWWWWWWKWKWKWKWKWKWKWKWKWWWKKWWK..',
+        'KTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTK.',
+        '.KWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWK..',
+        '..KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK...',
+        '.................KWWWWWWWK..........',
+        '..................KKKKKKK...........',
+      ],
+      cloud: [
+        '..WWW...',
+        '.WWWWWW.',
+        'WWWWWWWW',
+      ],
+      planeTop: [
+        '.....K.....',
+        '....KWK....',
+        '....KWK....',
+        '...KKWKK...',
+        '.KKWWWWWKK.',
+        'KWWWWWWWWWK',
+        '.KKKKWKKKK.',
+        '....KWK....',
+        '...KKWKK...',
+        '...KWWWK...',
+        '...KKKKK...',
+      ],
+      floppy: [
+        'KKKKKKKKKK.',
+        'KKMMMMMKKKK',
+        'KKMMKMMKKKK',
+        'KKMMMMMKKKK',
+        'KKKKKKKKKKK',
+        'KWWWWWWWWWK',
+        'KWKKKKKKKWK',
+        'KWWWWWWWWWK',
+        'KWKKKKKKKWK',
+        'KWWWWWWWWWK',
+        'KKKKKKKKKKK',
+      ],
+      doc: [
+        'KKKKKKK...',
+        'KWWWWWKK..',
+        'KWWWWWKWK.',
+        'KWWWWWKKKK',
+        'KWKKKKKWWK',
+        'KWWWWWWWWK',
+        'KWKKKKKKWK',
+        'KWWWWWWWWK',
+        'KWKKKKKKWK',
+        'KWWWWWWWWK',
+        'KKKKKKKKKK',
+      ],
+      clock: [
+        '..KKKKK..',
+        '.KWWKWWK.',
+        'KWWWKWWWK',
+        'KWWWKWWWK',
+        'KWWWKKKWK',
+        'KWWWWWWWK',
+        'KWWWWWWWK',
+        '.KWWWWWK.',
+        '..KKKKK..',
+      ],
+      arrowUp: [
+        '....K....',
+        '...KKK...',
+        '..KKKKK..',
+        '.KKKKKKK.',
+        'KKKKKKKKK',
+        '...KKK...',
+        '...KKK...',
+        '...KKK...',
+        '...KKK...',
+      ],
+    };
+
+    const rootStyle = getComputedStyle(document.documentElement);
+    const token = (name) => rootStyle.getPropertyValue(name).trim();
+    const basePalette = {
+      K: token('--ink'),
+      W: token('--canvas'),
+      M: token('--tint-steel'),
+      S: token('--tint-sky'),
+    };
+
+    function pixelSvg(map, palette, scale) {
+      let rects = '';
+      map.forEach((row, y) => {
+        let x = 0;
+        while (x < row.length) {
+          const ch = row[x];
+          let run = 1;
+          while (row[x + run] === ch) run += 1;
+          if (ch !== '.') {
+            rects += '<rect x="' + x + '" y="' + y + '" width="' + run + '" height="1" fill="' + palette[ch] + '"/>';
+          }
+          x += run;
+        }
+      });
+      const w = Math.max(...map.map((row) => row.length));
+      const h = map.length;
+      const size = scale ? ' width="' + w * scale + '" height="' + h * scale + '"' : '';
+      return '<svg viewBox="0 0 ' + w + ' ' + h + '"' + size +
+        ' shape-rendering="crispEdges" aria-hidden="true" focusable="false">' + rects + '</svg>';
+    }
+
+    function photoMap() {
+      const grid = Array.from({ length: 28 }, () => Array(44).fill('S'));
+      const stamp = (map, ox, oy) => map.forEach((row, y) => {
+        [...row].forEach((ch, x) => {
+          if (ch !== '.') grid[oy + y][ox + x] = ch;
+        });
+      });
+      stamp(art.cloud, 29, 2);
+      stamp(art.cloud, 5, 23);
+      stamp(art.planeSide, 4, 8);
+      return grid.map((row) => row.join(''));
+    }
+
+    const photo = photoMap();
+    const regionsEl = document.getElementById('regions');
+    const iconGrid = document.getElementById('icon-grid');
+    const template = document.getElementById('region-template');
+    const rows = new Map();
+
     const money = new Intl.NumberFormat('en-US', {
       maximumFractionDigits: 2,
       minimumFractionDigits: 2,
@@ -392,82 +1122,150 @@
       maximumFractionDigits: 2,
     });
 
-    function cell(text, className) {
-      const td = document.createElement('td');
-      if (className) td.className = className;
-      td.textContent = text;
-      return td;
+    function el(tag, className, text) {
+      const node = document.createElement(tag);
+      if (className) node.className = className;
+      if (text !== undefined) node.textContent = text;
+      return node;
     }
 
     function formatNumber(value, formatter) {
       return typeof value === 'number' && Number.isFinite(value) ? formatter.format(value) : 'n/a';
     }
 
-    function renderRows() {
-      body.innerHTML = '';
+    function renderRow(stock) {
+      const row = el('tr');
 
-      stocks.forEach((stock) => {
-        const row = document.createElement('tr');
-        row.dataset.file = stock.file;
-        row.append(
-          cell(stock.ticker, 'ticker'),
-          cell(stock.company, 'company'),
-          cell(stock.exchange, 'market'),
-          cell('---', 'value loading'),
-          cell('---', 'value loading'),
-          cell('---', 'value loading'),
-          cell('---', 'value loading')
-        );
+      const airline = el('td', 'airline', stock.company);
+      airline.append(el('span', 'exchange', stock.exchange));
 
-        const jsonCell = document.createElement('td');
-        const link = document.createElement('a');
-        link.href = stock.file;
-        link.textContent = stock.file;
-        jsonCell.append(link);
-        row.append(jsonCell);
-        body.append(row);
+      const price = el('td', 'num price');
+      price.dataset.label = 'Price';
+      const priceValue = el('span', 'loading', '---');
+      const curInline = el('span', 'cur-inline');
+      price.append(priceValue, curInline);
+
+      const cur = el('td', 'cur loading', '---');
+      const cap = el('td', 'num loading', '---');
+      cap.dataset.label = 'Mkt cap';
+      const pe = el('td', 'num loading', '---');
+      pe.dataset.label = 'P/E';
+
+      const file = el('td', 'file');
+      const link = el('a', '', stock.file.replace('data/', ''));
+      link.href = stock.file;
+      file.append(link);
+
+      row.append(el('td', 'ticker', stock.ticker), airline, price, cur, cap, pe, file);
+      rows.set(stock.file, { priceValue, curInline, cur, cap, pe });
+      return row;
+    }
+
+    function renderRegions() {
+      const firstStatic = iconGrid.firstElementChild;
+
+      regions.forEach((region) => {
+        const members = stocks.filter((stock) => stock.region === region.id);
+        const section = template.content.firstElementChild.cloneNode(true);
+        const tint = token(region.tint);
+
+        section.id = region.id;
+        section.style.setProperty('--tint', 'var(' + region.tint + ')');
+        section.setAttribute('aria-labelledby', region.id + '-title');
+        section.querySelector('h2').id = region.id + '-title';
+        section.querySelector('h2').textContent = region.name;
+        section.querySelector('.ribbon-meta').textContent =
+          members.length + (members.length === 1 ? ' carrier' : ' carriers');
+        section.querySelector('.pitch').textContent = region.pitch;
+        section.querySelector('.notch').innerHTML = pixelSvg(photo, {
+          ...basePalette,
+          T: token(region.livery || region.tint),
+        });
+
+        const tbody = section.querySelector('tbody');
+        members.forEach((stock) => tbody.append(renderRow(stock)));
+        regionsEl.insertBefore(section, document.getElementById('json'));
+
+        const link = el('a', 'icon-link');
+        link.href = '#' + region.id;
+        const tile = el('span', 'tile');
+        tile.style.setProperty('--tint', tint);
+        tile.innerHTML = pixelSvg(art.planeTop, basePalette, 2);
+        link.append(tile, el('span', 'icon-label', region.short));
+        iconGrid.insertBefore(link, firstStatic);
       });
     }
 
-    async function loadOne(stock) {
-      const row = body.querySelector('[data-file="' + stock.file + '"]');
-      const valueCells = row.querySelectorAll('.value');
-
-      valueCells.forEach((td) => {
-        td.className = 'value loading';
-        td.textContent = '---';
+    function paintArt() {
+      document.querySelectorAll('[data-art]').forEach((node) => {
+        node.innerHTML = pixelSvg(art[node.dataset.art], basePalette, 2);
       });
+    }
+
+    function setStats() {
+      const exchanges = new Set(stocks.map((stock) => stock.exchange)).size;
+      document.querySelectorAll('[data-stat="count"]').forEach((node) => {
+        node.textContent = stocks.length;
+      });
+      document.querySelectorAll('[data-stat="exchanges"]').forEach((node) => {
+        node.textContent = exchanges;
+      });
+      document.getElementById('year').textContent = new Date().getFullYear();
+    }
+
+    function setCell(node, text, state) {
+      node.classList.remove('loading', 'nodata');
+      if (state) node.classList.add(state);
+      node.textContent = text;
+    }
+
+    async function loadOne(stock) {
+      const cells = rows.get(stock.file);
+      setCell(cells.priceValue, '---', 'loading');
+      setCell(cells.cur, '---', 'loading');
+      setCell(cells.cap, '---', 'loading');
+      setCell(cells.pe, '---', 'loading');
+      cells.curInline.textContent = '';
 
       try {
         const res = await fetch(stock.file, { cache: 'no-store' });
         if (!res.ok) throw new Error('Missing data file');
         const data = await res.json();
 
-        valueCells[0].className = 'value';
-        valueCells[0].textContent = formatNumber(data.stockPrice, money);
-
-        valueCells[1].className = 'value';
-        valueCells[1].textContent = data.currency || 'n/a';
-
-        valueCells[2].className = 'value';
-        valueCells[2].textContent = formatNumber(data.marketCap, compact);
-
-        valueCells[3].className = 'value';
-        valueCells[3].textContent = formatNumber(data.peRatio, money);
+        setCell(cells.priceValue, formatNumber(data.stockPrice, money));
+        setCell(cells.cur, data.currency || 'n/a');
+        cells.curInline.textContent = data.currency ? ' ' + data.currency : '';
+        setCell(cells.cap, formatNumber(data.marketCap, compact));
+        setCell(cells.pe, formatNumber(data.peRatio, money));
+        return data;
       } catch (err) {
-        valueCells.forEach((td) => {
-          td.className = 'value error';
-          td.textContent = 'no data';
-        });
+        [cells.priceValue, cells.cur, cells.cap, cells.pe].forEach((node) => setCell(node, 'no data', 'nodata'));
+        return null;
       }
     }
 
-    function loadStocks() {
-      stocks.forEach(loadOne);
+    const statusEl = document.getElementById('status');
+    const refreshButtons = document.querySelectorAll('[data-refresh]');
+
+    async function loadStocks() {
+      refreshButtons.forEach((button) => { button.disabled = true; });
+      statusEl.textContent = 'Loading prices…';
+
+      const results = await Promise.all(stocks.map(loadOne));
+      const loaded = results.filter(Boolean);
+      const currencies = new Set(loaded.map((data) => data.currency).filter(Boolean));
+      const time = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+      document.getElementById('currency-count').textContent = currencies.size || '—';
+      statusEl.textContent = loaded.length + ' of ' + stocks.length + ' files loaded at ' + time + '.';
+      refreshButtons.forEach((button) => { button.disabled = false; });
     }
 
-    document.getElementById('stock-count').textContent = stocks.length;
-    renderRows();
+    refreshButtons.forEach((button) => button.addEventListener('click', loadStocks));
+
+    setStats();
+    renderRegions();
+    paintArt();
     loadStocks();
   </script>
 </body>
