@@ -1,0 +1,24 @@
+name: Data Freshness Watchdog
+
+on:
+  schedule:
+    # Every 6 hours. Fails when the last successful data update is too old.
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  check-freshness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check that the data was updated recently
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          STALE_HOURS: '12'
+        run: python3 scripts/check_freshness.py
