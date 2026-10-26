@@ -5,6 +5,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -15,9 +16,11 @@ from update_data import (  # noqa: E402
     BASE_DELAY_SECONDS,
     MAX_ATTEMPTS,
     clean_number,
+    fetch_fx_rate,
     fetch_symbol,
     load_existing,
     run,
+    validate_fx_record,
 )
 
 NAN = float("nan")
@@ -240,11 +243,16 @@ class RunTests(unittest.TestCase):
         existing = '{"stockPrice": 1.5, "currency": "EUR", "marketCap": 9, "peRatio": null}'
         (self.tmp / "bad.json").write_text(existing)
         code, out, _, calls = self.run_updater(
-            {"bad": "BAD"}, {"BAD": FakeTicker(error=RuntimeError("down"))}
+            {"bad": "BAD"},
+            {
+                "BAD": FakeTicker(error=RuntimeError("down")),
+                "EURUSD=X": FakeTicker(fast={"last_price": 1.08}),
+            },
         )
         self.assertEqual(code, 0)
         self.assertEqual((self.tmp / "bad.json").read_text(), existing)
-        self.assertEqual(calls, ["BAD"] * MAX_ATTEMPTS)
+        # The kept file's currency still gets a rate.
+        self.assertEqual(calls, ["BAD"] * MAX_ATTEMPTS + ["EURUSD=X"])
         self.assertIn("::warning::BAD: all attempts failed; keeping existing", out)
 
     def test_retries_use_injected_sleep_with_backoff(self):
@@ -293,6 +301,199 @@ class RunTests(unittest.TestCase):
 
     def test_default_factory_is_not_imported_eagerly(self):
         self.assertNotIn("yfinance", sys.modules)
+
+
+T0 = datetime(2026, 10, 26, 13, 30, tzinfo=timezone.utc)
+
+
+def stock(currency, price=1):
+    return FakeTicker(
+        info={"currency": currency, "currentPrice": price, "marketCap": 1}
+    )
+
+
+def fx(rate):
+    return FakeTicker(fast={"last_price": rate})
+
+
+STOCKS = {"u": "U", "e": "E", "l": "L", "j": "J"}
+
+
+class FxTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp)
+        self.sleeps = []
+
+    def run_updater(self, fx_tickers, now=T0, symbols=STOCKS):
+        tickers = {
+            "U": stock("USD"),
+            "E": stock("EUR"),
+            "L": stock("GBp"),
+            "J": stock("JPY"),
+            **fx_tickers,
+        }
+        make = factory(tickers)
+        code, out, err = quiet(
+            run,
+            data_dir=self.tmp,
+            ticker_factory=make,
+            sleep=self.sleeps.append,
+            symbols=symbols,
+            now=now if callable(now) else lambda: now,
+        )
+        return code, out, err, [c for c in make.calls if c.endswith("=X")]
+
+    def fx_record(self):
+        return json.loads((self.tmp / "fx.json").read_text())
+
+    def good_fx(self):
+        return {
+            "EURUSD=X": fx(1.08),
+            "GBPUSD=X": fx(1.26),
+            "JPYUSD=X": fx(0.0066),
+        }
+
+    def test_writes_one_rate_per_currency(self):
+        code, out, _, calls = self.run_updater(self.good_fx())
+        self.assertEqual(code, 0)
+        self.assertEqual(
+            (self.tmp / "fx.json").read_text(),
+            '{\n  "base": "USD",\n  "source": "Yahoo Finance",\n'
+            '  "updatedAt": "2026-10-26T13:30:00Z",\n  "rates": {\n'
+            '    "EUR": 1.08,\n    "GBp": 0.0126,\n    "JPY": 0.0066,\n'
+            '    "USD": 1\n  }\n}\n',
+        )
+        self.assertEqual(validate_fx_record(self.fx_record()), [])
+        # USD is never fetched and GBp comes from GBP, not its own symbol.
+        self.assertEqual(calls, ["EURUSD=X", "GBPUSD=X", "JPYUSD=X"])
+        self.assertIn("Wrote 4 FX rates", out)
+
+    def test_usd_only_fetches_nothing(self):
+        code, _, _, calls = self.run_updater({}, symbols={"u": "U"})
+        self.assertEqual(code, 0)
+        self.assertEqual(calls, [])
+        self.assertEqual(self.fx_record()["rates"], {"USD": 1})
+
+    def test_gbp_and_gbp_pence_share_one_fetch(self):
+        tickers = {"P": stock("GBP"), "L": stock("GBp"), "GBPUSD=X": fx(1.2345678)}
+        make = factory(tickers)
+        quiet(
+            run,
+            data_dir=self.tmp,
+            ticker_factory=make,
+            sleep=self.sleeps.append,
+            symbols={"p": "P", "l": "L"},
+            now=lambda: T0,
+        )
+        self.assertEqual(make.calls.count("GBPUSD=X"), 1)
+        self.assertEqual(
+            self.fx_record()["rates"],
+            {"GBP": 1.23457, "GBp": 0.0123457, "USD": 1},
+        )
+
+    def test_rate_falls_back_to_history_and_retries(self):
+        attempts = iter([FakeTicker(error=RuntimeError("down")), FakeTicker(
+            fast={"last_price": NAN}, closes=[1.07, 1.09, NAN]
+        )])
+        tickers = dict(self.good_fx(), **{"EURUSD=X": lambda: next(attempts)})
+        code, out, _, calls = self.run_updater(tickers)
+        self.assertEqual(code, 0)
+        self.assertEqual(self.fx_record()["rates"]["EUR"], 1.09)
+        self.assertEqual(calls, ["EURUSD=X", "EURUSD=X", "GBPUSD=X", "JPYUSD=X"])
+        self.assertIn("::warning::EURUSD=X: attempt 1/", out)
+
+    def test_failed_currency_keeps_last_valid_rate(self):
+        self.run_updater(self.good_fx())
+        later = T0 + timedelta(minutes=30)
+        tickers = dict(
+            self.good_fx(),
+            **{
+                "EURUSD=X": FakeTicker(error=RuntimeError("down")),
+                "JPYUSD=X": fx(0.0067),
+            },
+        )
+        code, out, _, calls = self.run_updater(tickers, now=later)
+        self.assertEqual(code, 0)
+        self.assertEqual(calls.count("EURUSD=X"), MAX_ATTEMPTS)
+        record = self.fx_record()
+        self.assertEqual(record["rates"]["EUR"], 1.08)
+        self.assertEqual(record["rates"]["JPY"], 0.0067)
+        self.assertEqual(record["updatedAt"], "2026-10-26T14:00:00Z")
+        self.assertIn("keeping the last EUR rate 1.08", out)
+
+    def test_failed_currency_without_history_is_left_out(self):
+        tickers = dict(self.good_fx(), **{"GBPUSD=X": fx(0)})
+        code, out, err, _ = self.run_updater(tickers)
+        self.assertEqual(code, 0)
+        self.assertEqual(err, "")
+        self.assertEqual(
+            self.fx_record()["rates"], {"EUR": 1.08, "JPY": 0.0066, "USD": 1}
+        )
+        self.assertIn("::warning::GBPUSD=X: all attempts failed and there is", out)
+
+    def test_every_fx_failure_never_fails_the_run(self):
+        down = FakeTicker(error=RuntimeError("down"))
+        code, _, _, _ = self.run_updater(
+            {"EURUSD=X": down, "GBPUSD=X": down, "JPYUSD=X": down}
+        )
+        self.assertEqual(code, 0)
+        self.assertEqual(self.fx_record()["rates"], {"USD": 1})
+
+    def test_unexpected_fx_error_is_a_warning(self):
+        def broken_now():
+            raise OSError("clock")
+
+        code, out, err, _ = self.run_updater(self.good_fx(), now=broken_now)
+        self.assertEqual(code, 0)
+        self.assertIn("::warning::FX rates were not updated: OSError: clock", out)
+        for key in STOCKS:
+            self.assertTrue((self.tmp / f"{key}.json").exists())
+
+    def test_unchanged_rates_leave_file_byte_identical(self):
+        self.run_updater(self.good_fx())
+        before = (self.tmp / "fx.json").read_bytes()
+        _, out, _, _ = self.run_updater(
+            self.good_fx(), now=T0 + timedelta(hours=1)
+        )
+        self.assertEqual((self.tmp / "fx.json").read_bytes(), before)
+        self.assertIn("FX rates unchanged", out)
+
+    def test_repo_fx_file_round_trips(self):
+        source = REPO_ROOT / "data" / "fx.json"
+        shutil.copy(source, self.tmp / "fx.json")
+        rates = json.loads(source.read_text())["rates"]
+        tickers = {}
+        symbols = {}
+        for currency, rate in rates.items():
+            symbols[currency.lower()] = currency
+            tickers[currency] = stock(currency)
+            if currency == "GBp":
+                tickers["GBPUSD=X"] = fx(rate * 100)
+            elif currency != "USD":
+                tickers[f"{currency}USD=X"] = fx(rate)
+        make = factory(tickers)
+        quiet(
+            run,
+            data_dir=self.tmp,
+            ticker_factory=make,
+            sleep=self.sleeps.append,
+            symbols=symbols,
+            now=lambda: T0 + timedelta(days=1),
+        )
+        self.assertEqual((self.tmp / "fx.json").read_bytes(), source.read_bytes())
+
+    def test_invalid_existing_file_is_replaced(self):
+        (self.tmp / "fx.json").write_text('{"base": "USD", "rates": {"EUR": NaN}}')
+        code, _, _, _ = self.run_updater(self.good_fx())
+        self.assertEqual(code, 0)
+        self.assertEqual(validate_fx_record(self.fx_record()), [])
+
+    def test_fetch_fx_rate_rejects_non_positive_quotes(self):
+        for quote in (0, -1.5, NAN, INF, None, "x"):
+            with self.subTest(quote=quote):
+                with self.assertRaisesRegex(RuntimeError, "no valid FX quote"):
+                    quiet(fetch_fx_rate, "EURUSD=X", factory({"EURUSD=X": fx(quote)}))
 
 
 class LoadExistingTests(unittest.TestCase):
