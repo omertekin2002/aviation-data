@@ -27,8 +27,10 @@ rates[c] is the number of USD per one unit of currency c, so a value v in c
 is v * rates[c] USD. USD is always 1. GBp (London listings quoted in pence) is
 the GBP rate / 100. Each rate is fetched as <c>USD=X with the same retries;
 when they all fail the last valid rate in the existing file is kept, and a
-currency with no rate at all is left out with a warning. FX problems never
-make the script exit non-zero. updatedAt is the UTC time of the run that last
+currency with no rate at all is left out with a warning. When no stock quote
+could be fetched in the run, Yahoo is treated as down and the FX fetches are
+skipped, leaving fx.json as it is, so retries cannot push the run past its
+timeout. FX problems never make the script exit non-zero. updatedAt is the UTC time of the run that last
 changed a rate, so runs where no rate changed leave the file untouched.
 
 Usage:
@@ -419,6 +421,7 @@ def run(
     data_dir = Path(data_dir)
     data_dir.mkdir(exist_ok=True)
     unrecoverable = []
+    fetched_any = False
 
     for index, (file_key, symbol) in enumerate(symbols.items(), start=1):
         path = data_dir / f"{file_key}.json"
@@ -436,6 +439,7 @@ def run(
                     f"market cap {out['marketCap']} | P/E {out['peRatio']}"
                 )
                 last_error = None
+                fetched_any = True
                 break
             except Exception as exc:
                 last_error = exc
@@ -459,17 +463,25 @@ def run(
         if index < len(symbols):
             sleep(1)
 
-    try:
-        update_fx(
-            data_dir,
-            stock_currencies(data_dir, symbols),
-            ticker_factory,
-            sleep,
-            now,
+    if not fetched_any:
+        print(
+            "::warning::no stock quote was fetched; skipping FX fetches and "
+            f"leaving {data_dir / FX_FILE} as is"
         )
-    except Exception as exc:
-        print(f"::warning::FX rates were not updated: {type(exc).__name__}: {exc}")
-        traceback.print_exception(exc)
+    else:
+        try:
+            update_fx(
+                data_dir,
+                stock_currencies(data_dir, symbols),
+                ticker_factory,
+                sleep,
+                now,
+            )
+        except Exception as exc:
+            print(
+                f"::warning::FX rates were not updated: {type(exc).__name__}: {exc}"
+            )
+            traceback.print_exception(exc)
 
     if unrecoverable:
         print(

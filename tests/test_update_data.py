@@ -243,16 +243,11 @@ class RunTests(unittest.TestCase):
         existing = '{"stockPrice": 1.5, "currency": "EUR", "marketCap": 9, "peRatio": null}'
         (self.tmp / "bad.json").write_text(existing)
         code, out, _, calls = self.run_updater(
-            {"bad": "BAD"},
-            {
-                "BAD": FakeTicker(error=RuntimeError("down")),
-                "EURUSD=X": FakeTicker(fast={"last_price": 1.08}),
-            },
+            {"bad": "BAD"}, {"BAD": FakeTicker(error=RuntimeError("down"))}
         )
         self.assertEqual(code, 0)
         self.assertEqual((self.tmp / "bad.json").read_text(), existing)
-        # The kept file's currency still gets a rate.
-        self.assertEqual(calls, ["BAD"] * MAX_ATTEMPTS + ["EURUSD=X"])
+        self.assertEqual(calls, ["BAD"] * MAX_ATTEMPTS)
         self.assertIn("::warning::BAD: all attempts failed; keeping existing", out)
 
     def test_retries_use_injected_sleep_with_backoff(self):
@@ -449,6 +444,30 @@ class FxTests(unittest.TestCase):
         self.assertIn("::warning::FX rates were not updated: OSError: clock", out)
         for key in STOCKS:
             self.assertTrue((self.tmp / f"{key}.json").exists())
+
+    def test_kept_stock_currency_still_gets_a_rate(self):
+        (self.tmp / "e.json").write_text(
+            '{"stockPrice": 1.5, "currency": "EUR", "marketCap": 9, "peRatio": null}'
+        )
+        code, _, _, calls = self.run_updater(
+            {"EURUSD=X": fx(1.08)},
+            symbols={"u": "U", "e": "BAD"},
+        )
+        self.assertEqual(code, 0)
+        self.assertEqual(calls, ["EURUSD=X"])
+        self.assertEqual(self.fx_record()["rates"], {"EUR": 1.08, "USD": 1})
+
+    def test_fx_is_skipped_when_no_stock_was_fetched(self):
+        self.run_updater(self.good_fx())
+        before = (self.tmp / "fx.json").read_bytes()
+        down = FakeTicker(error=RuntimeError("down"))
+        code, out, _, calls = self.run_updater(
+            {"U": down, "E": down, "L": down, "J": down}, now=T0 + timedelta(hours=1)
+        )
+        self.assertEqual(code, 0)
+        self.assertEqual(calls, [])
+        self.assertEqual((self.tmp / "fx.json").read_bytes(), before)
+        self.assertIn("::warning::no stock quote was fetched; skipping FX", out)
 
     def test_unchanged_rates_leave_file_byte_identical(self):
         self.run_updater(self.good_fx())
