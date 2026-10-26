@@ -25,14 +25,16 @@ currency the stock files use, also from Yahoo Finance:
 
 rates[c] is the number of USD per one unit of currency c, so a value v in c
 is v * rates[c] USD. USD is always 1. GBp (London listings quoted in pence) is
-the GBP rate / 100. Each rate is fetched as <c>USD=X with the same retries;
+the GBP rate / 100. Each rate is the latest daily close of <c>USD=X (the
+live quote while the day is open), fetched with the same retries;
 when they all fail the last valid rate in the existing file is kept, and a
 currency with no rate at all is left out with a warning. When no stock quote
 could be fetched in the run, Yahoo is treated as down and the FX fetches are
 skipped, leaving fx.json as it is. All FX fetching also stops after
-FX_TIME_BUDGET_SECONDS, and the currencies not reached keep their last rate,
-so FX retries cannot push the run past the workflow's timeout. FX problems
-never make the script exit non-zero. updatedAt is the UTC time of the run that last
+FX_TIME_BUDGET_SECONDS, with each request's timeout capped by the time left,
+and the currencies not reached keep their last rate, so FX retries cannot push
+the run past the workflow's timeout. FX problems never make the script exit
+non-zero. updatedAt is the UTC time of the run that last
 changed a rate, so runs where no rate changed leave the file untouched.
 
 Usage:
@@ -61,6 +63,7 @@ FX_SUBUNITS = {"GBp": ("GBP", 100)}
 FX_SIGNIFICANT_DIGITS = 6
 # Total time for FX fetches, retries and pauses. A normal run needs ~30 s.
 FX_TIME_BUDGET_SECONDS = 120
+FX_REQUEST_TIMEOUT_SECONDS = 10
 
 stocks = {
     "alk": "ALK",
@@ -286,32 +289,23 @@ def round_rate(rate):
     return float(f"{rate:.{FX_SIGNIFICANT_DIGITS}g}")
 
 
-def fetch_fx_rate(symbol, ticker_factory=default_ticker_factory):
-    """Return the latest quote for an FX symbol as a finite number > 0."""
-    ticker = ticker_factory(symbol)
+def fetch_fx_rate(
+    symbol, ticker_factory=default_ticker_factory, timeout=FX_REQUEST_TIMEOUT_SECONDS
+):
+    """Return the latest close of an FX symbol as a finite number > 0.
 
-    fast = {}
-    try:
-        fast = ticker.fast_info
-    except Exception as exc:
-        print(f"::warning::{symbol}: fast_info failed: {exc}")
-
-    history_rate = None
-    try:
-        history = ticker.history(period="5d", interval="1d", auto_adjust=False)
-        if not history.empty:
-            closes = history["Close"].dropna()
-            if not closes.empty:
-                history_rate = closes.iloc[-1]
-    except Exception as exc:
-        print(f"::warning::{symbol}: history fallback failed: {exc}")
-
-    for value in (safe_get(fast, "last_price"), history_rate):
+    One request, so timeout bounds how long it can take.
+    """
+    history = ticker_factory(symbol).history(
+        period="5d", interval="1d", auto_adjust=False, timeout=timeout
+    )
+    closes = history["Close"].dropna() if not history.empty else None
+    if closes is not None and not closes.empty:
         try:
-            rate = float(value)
+            rate = float(closes.iloc[-1])
         except (TypeError, ValueError, OverflowError):
-            continue
-        if math.isfinite(rate) and rate > 0:
+            rate = None
+        if rate is not None and math.isfinite(rate) and rate > 0:
             return rate
     raise RuntimeError("no valid FX quote")
 
@@ -357,15 +351,18 @@ def update_fx(data_dir, currencies, ticker_factory, sleep, now, clock):
     deadline = clock() + FX_TIME_BUDGET_SECONDS
     for index, currency in enumerate(to_fetch, start=1):
         if clock() >= deadline:
-            print(
-                f"::warning::FX time budget of {FX_TIME_BUDGET_SECONDS}s used "
-                f"up; not fetching {', '.join(to_fetch[index - 1:])}"
-            )
             break
         symbol = fx_symbol(currency)
         for attempt in range(1, MAX_ATTEMPTS + 1):
+            remaining = deadline - clock()
+            if remaining <= 0:
+                break
             try:
-                fetched[currency] = fetch_fx_rate(symbol, ticker_factory)
+                fetched[currency] = fetch_fx_rate(
+                    symbol,
+                    ticker_factory,
+                    min(FX_REQUEST_TIMEOUT_SECONDS, remaining),
+                )
                 print(f"{symbol}: {fetched[currency]}")
                 break
             except Exception as exc:
@@ -379,6 +376,12 @@ def update_fx(data_dir, currencies, ticker_factory, sleep, now, clock):
                 sleep(delay)
         if index < len(to_fetch):
             sleep(1)
+    missed = [c for c in to_fetch if c not in fetched]
+    if missed and clock() >= deadline:
+        print(
+            f"::warning::FX time budget of {FX_TIME_BUDGET_SECONDS}s used up "
+            f"with no new rate for {', '.join(missed)}"
+        )
 
     rates = {FX_BASE: 1}
     for currency in sorted(currencies - {FX_BASE}):

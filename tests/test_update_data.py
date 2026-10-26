@@ -14,6 +14,7 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 import update_data  # noqa: E402
 from update_data import (  # noqa: E402
     BASE_DELAY_SECONDS,
+    FX_REQUEST_TIMEOUT_SECONDS,
     FX_TIME_BUDGET_SECONDS,
     MAX_ATTEMPTS,
     clean_number,
@@ -309,7 +310,7 @@ def stock(currency, price=1):
 
 
 def fx(rate):
-    return FakeTicker(fast={"last_price": rate})
+    return FakeTicker(closes=[rate])
 
 
 STOCKS = {"u": "U", "e": "E", "l": "L", "j": "J"}
@@ -388,9 +389,9 @@ class FxTests(unittest.TestCase):
             {"GBP": 1.23457, "GBp": 0.0123457, "USD": 1},
         )
 
-    def test_rate_falls_back_to_history_and_retries(self):
+    def test_rate_is_last_valid_close_and_retries(self):
         attempts = iter([FakeTicker(error=RuntimeError("down")), FakeTicker(
-            fast={"last_price": NAN}, closes=[1.07, 1.09, NAN]
+            closes=[1.07, 1.09, NAN]
         )])
         tickers = dict(self.good_fx(), **{"EURUSD=X": lambda: next(attempts)})
         code, out, _, calls = self.run_updater(tickers)
@@ -473,42 +474,61 @@ class FxTests(unittest.TestCase):
     def test_fx_fetching_stops_at_the_time_budget(self):
         self.run_updater(self.good_fx())
         clock = [0.0]
+        timeouts = []
 
-        def slow_factory(symbol):
-            # Every request takes 50 s, and fails for FX symbols.
-            clock[0] += 50
+        class Hanging(FakeTicker):
+            # Every request hangs until its timeout, then fails.
+            def history(self, **kwargs):
+                timeouts.append(kwargs["timeout"])
+                clock[0] += kwargs["timeout"]
+                raise TimeoutError("read timed out")
+
+        def make(symbol):
             if symbol.endswith("=X"):
-                raise RuntimeError("timeout")
+                return Hanging()
             return {"U": stock("USD"), "E": stock("EUR"),
                     "L": stock("GBp"), "J": stock("JPY")}[symbol]
 
         def sleep(seconds):
             clock[0] += seconds
 
-        code, out, _ = quiet(
-            run,
-            data_dir=self.tmp,
-            ticker_factory=slow_factory,
-            sleep=sleep,
-            symbols=STOCKS,
-            now=lambda: T0 + timedelta(hours=1),
-            clock=lambda: clock[0],
-        )
-        self.assertEqual(code, 0)
-        fx_attempts = out.count("::warning::EURUSD=X: attempt") + out.count(
-            "::warning::GBPUSD=X: attempt"
-        ) + out.count("::warning::JPYUSD=X: attempt")
-        # Each attempt takes 50 s: EUR gets three tries, then time is up.
-        self.assertEqual(fx_attempts, 3)
+        def run_fx():
+            started = clock[0]
+            update_data.update_fx(
+                self.tmp, {"USD", "EUR", "GBp", "JPY"}, make, sleep,
+                lambda: T0, lambda: clock[0],
+            )
+            return clock[0] - started
+
+        elapsed, out, _ = quiet(run_fx)
+        self.assertLessEqual(elapsed, FX_TIME_BUDGET_SECONDS)
+        self.assertTrue(all(0 < t <= FX_REQUEST_TIMEOUT_SECONDS for t in timeouts))
         self.assertIn(
-            f"FX time budget of {FX_TIME_BUDGET_SECONDS}s used up; "
-            "not fetching GBP, JPY",
+            f"FX time budget of {FX_TIME_BUDGET_SECONDS}s used up "
+            "with no new rate for EUR, GBP, JPY",
             out,
         )
         self.assertEqual(
             self.fx_record()["rates"],
             {"EUR": 1.08, "GBp": 0.0126, "JPY": 0.0066, "USD": 1},
         )
+
+    def test_fx_request_timeout_is_capped_by_the_time_left(self):
+        clock = [0.0]
+        timeouts = []
+
+        class Slow(FakeTicker):
+            def history(self, **kwargs):
+                timeouts.append(kwargs["timeout"])
+                clock[0] += FX_TIME_BUDGET_SECONDS - 3
+                return FakeHistory([1.08])
+
+        quiet(
+            update_data.update_fx,
+            self.tmp, {"EUR", "JPY"}, lambda symbol: Slow(),
+            lambda seconds: None, lambda: T0, lambda: clock[0],
+        )
+        self.assertEqual(timeouts, [FX_REQUEST_TIMEOUT_SECONDS, 3])
 
     def test_unchanged_rates_leave_file_byte_identical(self):
         self.run_updater(self.good_fx())
@@ -549,8 +569,19 @@ class FxTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(validate_fx_record(self.fx_record()), [])
 
+    def test_fetch_fx_rate_passes_its_timeout(self):
+        seen = {}
+
+        class Recording(FakeTicker):
+            def history(self, **kwargs):
+                seen.update(kwargs)
+                return FakeHistory([1.08])
+
+        self.assertEqual(fetch_fx_rate("EURUSD=X", lambda s: Recording(), 7.5), 1.08)
+        self.assertEqual(seen["timeout"], 7.5)
+
     def test_fetch_fx_rate_rejects_non_positive_quotes(self):
-        for quote in (0, -1.5, NAN, INF, None, "x"):
+        for quote in (0, -1.5, NAN, INF, None, "x", ()):
             with self.subTest(quote=quote):
                 with self.assertRaisesRegex(RuntimeError, "no valid FX quote"):
                     quiet(fetch_fx_rate, "EURUSD=X", factory({"EURUSD=X": fx(quote)}))
