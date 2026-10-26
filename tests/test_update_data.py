@@ -14,6 +14,7 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 import update_data  # noqa: E402
 from update_data import (  # noqa: E402
     BASE_DELAY_SECONDS,
+    FX_TIME_BUDGET_SECONDS,
     MAX_ATTEMPTS,
     clean_number,
     fetch_fx_rate,
@@ -425,7 +426,7 @@ class FxTests(unittest.TestCase):
         self.assertEqual(
             self.fx_record()["rates"], {"EUR": 1.08, "JPY": 0.0066, "USD": 1}
         )
-        self.assertIn("::warning::GBPUSD=X: all attempts failed and there is", out)
+        self.assertIn("::warning::GBPUSD=X: no new rate and no earlier one", out)
 
     def test_every_fx_failure_never_fails_the_run(self):
         down = FakeTicker(error=RuntimeError("down"))
@@ -468,6 +469,46 @@ class FxTests(unittest.TestCase):
         self.assertEqual(calls, [])
         self.assertEqual((self.tmp / "fx.json").read_bytes(), before)
         self.assertIn("::warning::no stock quote was fetched; skipping FX", out)
+
+    def test_fx_fetching_stops_at_the_time_budget(self):
+        self.run_updater(self.good_fx())
+        clock = [0.0]
+
+        def slow_factory(symbol):
+            # Every request takes 50 s, and fails for FX symbols.
+            clock[0] += 50
+            if symbol.endswith("=X"):
+                raise RuntimeError("timeout")
+            return {"U": stock("USD"), "E": stock("EUR"),
+                    "L": stock("GBp"), "J": stock("JPY")}[symbol]
+
+        def sleep(seconds):
+            clock[0] += seconds
+
+        code, out, _ = quiet(
+            run,
+            data_dir=self.tmp,
+            ticker_factory=slow_factory,
+            sleep=sleep,
+            symbols=STOCKS,
+            now=lambda: T0 + timedelta(hours=1),
+            clock=lambda: clock[0],
+        )
+        self.assertEqual(code, 0)
+        fx_attempts = out.count("::warning::EURUSD=X: attempt") + out.count(
+            "::warning::GBPUSD=X: attempt"
+        ) + out.count("::warning::JPYUSD=X: attempt")
+        # Each attempt takes 50 s: EUR gets three tries, then time is up.
+        self.assertEqual(fx_attempts, 3)
+        self.assertIn(
+            f"FX time budget of {FX_TIME_BUDGET_SECONDS}s used up; "
+            "not fetching GBP, JPY",
+            out,
+        )
+        self.assertEqual(
+            self.fx_record()["rates"],
+            {"EUR": 1.08, "GBp": 0.0126, "JPY": 0.0066, "USD": 1},
+        )
 
     def test_unchanged_rates_leave_file_byte_identical(self):
         self.run_updater(self.good_fx())

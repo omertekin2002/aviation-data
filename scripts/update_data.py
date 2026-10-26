@@ -29,8 +29,10 @@ the GBP rate / 100. Each rate is fetched as <c>USD=X with the same retries;
 when they all fail the last valid rate in the existing file is kept, and a
 currency with no rate at all is left out with a warning. When no stock quote
 could be fetched in the run, Yahoo is treated as down and the FX fetches are
-skipped, leaving fx.json as it is, so retries cannot push the run past its
-timeout. FX problems never make the script exit non-zero. updatedAt is the UTC time of the run that last
+skipped, leaving fx.json as it is. All FX fetching also stops after
+FX_TIME_BUDGET_SECONDS, and the currencies not reached keep their last rate,
+so FX retries cannot push the run past the workflow's timeout. FX problems
+never make the script exit non-zero. updatedAt is the UTC time of the run that last
 changed a rate, so runs where no rate changed leave the file untouched.
 
 Usage:
@@ -57,6 +59,8 @@ FX_SOURCE = "Yahoo Finance"
 # Currencies quoted in a sub-unit: derived from the main unit, not fetched.
 FX_SUBUNITS = {"GBp": ("GBP", 100)}
 FX_SIGNIFICANT_DIGITS = 6
+# Total time for FX fetches, retries and pauses. A normal run needs ~30 s.
+FX_TIME_BUDGET_SECONDS = 120
 
 stocks = {
     "alk": "ALK",
@@ -335,11 +339,12 @@ def stock_currencies(data_dir, symbols):
     return currencies
 
 
-def update_fx(data_dir, currencies, ticker_factory, sleep, now):
+def update_fx(data_dir, currencies, ticker_factory, sleep, now, clock):
     """Write data_dir/fx.json with a USD rate for each currency.
 
     Failures are warnings: a currency keeps its last valid rate, or is left
-    out when it has none. Returns the rates that were written or kept.
+    out when it has none. Fetching stops once FX_TIME_BUDGET_SECONDS have
+    passed on clock. Returns the rates that were written or kept.
     """
     path = data_dir / FX_FILE
     existing = load_existing_fx(path)
@@ -349,7 +354,14 @@ def update_fx(data_dir, currencies, ticker_factory, sleep, now):
         {FX_SUBUNITS.get(c, (c, 1))[0] for c in currencies} - {FX_BASE}
     )
     fetched = {}
+    deadline = clock() + FX_TIME_BUDGET_SECONDS
     for index, currency in enumerate(to_fetch, start=1):
+        if clock() >= deadline:
+            print(
+                f"::warning::FX time budget of {FX_TIME_BUDGET_SECONDS}s used "
+                f"up; not fetching {', '.join(to_fetch[index - 1:])}"
+            )
+            break
         symbol = fx_symbol(currency)
         for attempt in range(1, MAX_ATTEMPTS + 1):
             try:
@@ -361,8 +373,10 @@ def update_fx(data_dir, currencies, ticker_factory, sleep, now):
                     f"::warning::{symbol}: attempt {attempt}/{MAX_ATTEMPTS} "
                     f"failed: {type(exc).__name__}: {exc}"
                 )
-                if attempt < MAX_ATTEMPTS:
-                    sleep(BASE_DELAY_SECONDS * attempt)
+                delay = BASE_DELAY_SECONDS * attempt
+                if attempt == MAX_ATTEMPTS or clock() + delay >= deadline:
+                    break
+                sleep(delay)
         if index < len(to_fetch):
             sleep(1)
 
@@ -374,13 +388,13 @@ def update_fx(data_dir, currencies, ticker_factory, sleep, now):
         elif currency in old_rates:
             rates[currency] = old_rates[currency]
             print(
-                f"::warning::{fx_symbol(parent)}: all attempts failed; "
+                f"::warning::{fx_symbol(parent)}: no new rate; "
                 f"keeping the last {currency} rate {old_rates[currency]}"
             )
         else:
             print(
-                f"::warning::{fx_symbol(parent)}: all attempts failed and "
-                f"there is no earlier rate; leaving {currency} out of {path}"
+                f"::warning::{fx_symbol(parent)}: no new rate and "
+                f"no earlier one; leaving {currency} out of {path}"
             )
     rates = dict(sorted(rates.items()))
 
@@ -411,6 +425,7 @@ def run(
     sleep=time.sleep,
     symbols=None,
     now=utc_now,
+    clock=time.monotonic,
 ):
     """Update every symbol, then fx.json, and return the exit code (0 or 1).
 
@@ -476,6 +491,7 @@ def run(
                 ticker_factory,
                 sleep,
                 now,
+                clock,
             )
         except Exception as exc:
             print(
