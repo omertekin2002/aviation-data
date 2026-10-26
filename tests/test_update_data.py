@@ -4,9 +4,12 @@ import json
 import shutil
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest import mock
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
@@ -14,6 +17,7 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 import update_data  # noqa: E402
 from update_data import (  # noqa: E402
     BASE_DELAY_SECONDS,
+    call_with_deadline,
     FX_REQUEST_TIMEOUT_SECONDS,
     FX_TIME_BUDGET_SECONDS,
     MAX_ATTEMPTS,
@@ -512,6 +516,37 @@ class FxTests(unittest.TestCase):
             self.fx_record()["rates"],
             {"EUR": 1.08, "GBp": 0.0126, "JPY": 0.0066, "USD": 1},
         )
+
+    def test_fx_call_that_never_returns_is_abandoned_at_the_deadline(self):
+        release = threading.Event()
+        self.addCleanup(release.set)
+
+        class Stuck(FakeTicker):
+            def history(self, **kwargs):
+                release.wait()
+                return FakeHistory([1.0])
+
+        started = time.monotonic()
+        with mock.patch.object(update_data, "FX_TIME_BUDGET_SECONDS", 0.2):
+            _, out, _ = quiet(
+                update_data.update_fx,
+                self.tmp, {"EUR", "JPY"}, lambda symbol: Stuck(),
+                lambda seconds: None, lambda: T0, time.monotonic,
+            )
+        self.assertLess(time.monotonic() - started, 2)
+        self.assertIn("::warning::EURUSD=X: attempt 1/", out)
+        self.assertIn("TimeoutError: no answer within", out)
+        self.assertIn("used up with no new rate for EUR, JPY", out)
+        self.assertEqual(self.fx_record()["rates"], {"USD": 1})
+
+    def test_call_with_deadline(self):
+        self.assertEqual(call_with_deadline(1, lambda a, b: a + b, 2, 3), 5)
+        with self.assertRaisesRegex(ValueError, "bad"):
+            call_with_deadline(1, lambda: int("bad"))
+        release = threading.Event()
+        self.addCleanup(release.set)
+        with self.assertRaises(TimeoutError):
+            call_with_deadline(0.05, release.wait)
 
     def test_fx_request_timeout_is_capped_by_the_time_left(self):
         clock = [0.0]

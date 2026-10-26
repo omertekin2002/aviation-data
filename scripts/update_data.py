@@ -31,8 +31,8 @@ when they all fail the last valid rate in the existing file is kept, and a
 currency with no rate at all is left out with a warning. When no stock quote
 could be fetched in the run, Yahoo is treated as down and the FX fetches are
 skipped, leaving fx.json as it is. All FX fetching also stops after
-FX_TIME_BUDGET_SECONDS, with each request's timeout capped by the time left,
-and the currencies not reached keep their last rate, so FX retries cannot push
+FX_TIME_BUDGET_SECONDS: each fetch runs in a daemon thread that is abandoned
+when the time is up, and the currencies not reached keep their last rate, so FX retries cannot push
 the run past the workflow's timeout. FX problems never make the script exit
 non-zero. updatedAt is the UTC time of the run that last
 changed a rate, so runs where no rate changed leave the file untouched.
@@ -49,6 +49,7 @@ import argparse
 import json
 import math
 import sys
+import threading
 import time
 import traceback
 from datetime import datetime, timezone
@@ -310,6 +311,30 @@ def fetch_fx_rate(
     raise RuntimeError("no valid FX quote")
 
 
+def call_with_deadline(seconds, func, *args):
+    """Return func(*args), or raise TimeoutError after `seconds`.
+
+    func runs in a daemon thread, which is abandoned rather than killed when
+    time is up; it cannot keep the process alive.
+    """
+    outcome = {}
+
+    def target():
+        try:
+            outcome["value"] = func(*args)
+        except BaseException as exc:
+            outcome["error"] = exc
+
+    thread = threading.Thread(target=target, daemon=True)
+    thread.start()
+    thread.join(seconds)
+    if thread.is_alive():
+        raise TimeoutError(f"no answer within {seconds:.0f}s")
+    if "error" in outcome:
+        raise outcome["error"]
+    return outcome["value"]
+
+
 def load_existing_fx(path):
     """Return the existing fx.json record if it is valid, else None."""
     if not path.exists():
@@ -358,7 +383,9 @@ def update_fx(data_dir, currencies, ticker_factory, sleep, now, clock):
             if remaining <= 0:
                 break
             try:
-                fetched[currency] = fetch_fx_rate(
+                fetched[currency] = call_with_deadline(
+                    remaining,
+                    fetch_fx_rate,
                     symbol,
                     ticker_factory,
                     min(FX_REQUEST_TIMEOUT_SECONDS, remaining),
