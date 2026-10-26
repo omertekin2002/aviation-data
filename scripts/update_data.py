@@ -13,6 +13,30 @@ attempts fail, the existing file is kept if it is still valid. The script
 exits non-zero only when a symbol fails and has no valid existing file, after
 every other symbol has been processed.
 
+After the stocks, it writes data/fx.json with USD exchange rates for every
+currency the stock files use, also from Yahoo Finance:
+
+  {
+    "base": "USD",
+    "source": "Yahoo Finance",
+    "updatedAt": "2026-10-26T13:30:00Z",
+    "rates": {"EUR": 1.08, "GBp": 0.0126, "USD": 1}
+  }
+
+rates[c] is the number of USD per one unit of currency c, so a value v in c
+is v * rates[c] USD. USD is always 1. GBp (London listings quoted in pence) is
+the GBP rate / 100. Each rate is the latest daily close of <c>USD=X (the
+live quote while the day is open), fetched with the same retries;
+when they all fail the last valid rate in the existing file is kept, and a
+currency with no rate at all is left out with a warning. When no stock quote
+could be fetched in the run, Yahoo is treated as down and the FX fetches are
+skipped, leaving fx.json as it is. All FX fetching also stops after
+FX_TIME_BUDGET_SECONDS: each fetch runs in a daemon thread that is abandoned
+when the time is up, and the currencies not reached keep their last rate, so FX retries cannot push
+the run past the workflow's timeout. FX problems never make the script exit
+non-zero. updatedAt is the UTC time of the run that last
+changed a rate, so runs where no rate changed leave the file untouched.
+
 Usage:
   python scripts/update_data.py [--data-dir DIR]
 
@@ -25,11 +49,22 @@ import argparse
 import json
 import math
 import sys
+import threading
 import time
 import traceback
+from datetime import datetime, timezone
 from pathlib import Path
 
 DEFAULT_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+FX_FILE = "fx.json"
+FX_BASE = "USD"
+FX_SOURCE = "Yahoo Finance"
+# Currencies quoted in a sub-unit: derived from the main unit, not fetched.
+FX_SUBUNITS = {"GBp": ("GBP", 100)}
+FX_SIGNIFICANT_DIGITS = 6
+# Total time for FX fetches, retries and pauses. A normal run needs ~30 s.
+FX_TIME_BUDGET_SECONDS = 120
+FX_REQUEST_TIMEOUT_SECONDS = 10
 
 stocks = {
     "alk": "ALK",
@@ -145,6 +180,39 @@ def load_existing(path):
     return existing
 
 
+def validate_fx_record(record):
+    """Return a list of fx.json shape violations; an empty list means valid."""
+    if not isinstance(record, dict):
+        return [f"expected a JSON object, got {type(record).__name__}"]
+    problems = []
+    if record.get("base") != FX_BASE:
+        problems.append(f"base must be {FX_BASE!r}, got {record.get('base')!r}")
+    source = record.get("source")
+    if not isinstance(source, str) or not source:
+        problems.append(f"source must be a non-empty string, got {source!r}")
+    updated_at = record.get("updatedAt")
+    try:
+        datetime.strptime(updated_at, "%Y-%m-%dT%H:%M:%SZ")
+    except (TypeError, ValueError):
+        problems.append(
+            f"updatedAt must be a UTC time like 2026-10-26T13:30:00Z, got {updated_at!r}"
+        )
+    rates = record.get("rates")
+    if not isinstance(rates, dict):
+        problems.append(f"rates must be a JSON object, got {rates!r}")
+        return problems
+    for currency, rate in rates.items():
+        if not currency:
+            problems.append("rates has an empty currency code")
+        elif not _is_number(rate) or rate <= 0:
+            problems.append(
+                f"rates.{currency} must be a finite number > 0, got {rate!r}"
+            )
+    if FX_BASE in rates and rates[FX_BASE] != 1:
+        problems.append(f"rates.{FX_BASE} must be 1, got {rates[FX_BASE]!r}")
+    return problems
+
+
 def default_ticker_factory(symbol):
     import yfinance as yf
 
@@ -213,13 +281,183 @@ def fetch_symbol(symbol, ticker_factory=default_ticker_factory):
     }
 
 
+def fx_symbol(currency):
+    """Yahoo symbol quoting USD per one unit of currency."""
+    return f"{currency}{FX_BASE}=X"
+
+
+def round_rate(rate):
+    return float(f"{rate:.{FX_SIGNIFICANT_DIGITS}g}")
+
+
+def fetch_fx_rate(
+    symbol, ticker_factory=default_ticker_factory, timeout=FX_REQUEST_TIMEOUT_SECONDS
+):
+    """Return the latest close of an FX symbol as a finite number > 0.
+
+    One request, so timeout bounds how long it can take.
+    """
+    history = ticker_factory(symbol).history(
+        period="5d", interval="1d", auto_adjust=False, timeout=timeout
+    )
+    closes = history["Close"].dropna() if not history.empty else None
+    if closes is not None and not closes.empty:
+        try:
+            rate = float(closes.iloc[-1])
+        except (TypeError, ValueError, OverflowError):
+            rate = None
+        if rate is not None and math.isfinite(rate) and rate > 0:
+            return rate
+    raise RuntimeError("no valid FX quote")
+
+
+def call_with_deadline(seconds, func, *args):
+    """Return func(*args), or raise TimeoutError after `seconds`.
+
+    func runs in a daemon thread, which is abandoned rather than killed when
+    time is up; it cannot keep the process alive.
+    """
+    outcome = {}
+
+    def target():
+        try:
+            outcome["value"] = func(*args)
+        except BaseException as exc:
+            outcome["error"] = exc
+
+    thread = threading.Thread(target=target, daemon=True)
+    thread.start()
+    thread.join(seconds)
+    if thread.is_alive():
+        raise TimeoutError(f"no answer within {seconds:.0f}s")
+    if "error" in outcome:
+        raise outcome["error"]
+    return outcome["value"]
+
+
+def load_existing_fx(path):
+    """Return the existing fx.json record if it is valid, else None."""
+    if not path.exists():
+        return None
+    try:
+        existing = read_record(path)
+    except (OSError, ValueError):
+        return None
+    if validate_fx_record(existing):
+        return None
+    return existing
+
+
+def stock_currencies(data_dir, symbols):
+    """Distinct currencies of the valid stock files for symbols."""
+    currencies = set()
+    for file_key in symbols:
+        record = load_existing(data_dir / f"{file_key}.json")
+        if record is not None:
+            currencies.add(record["currency"])
+    return currencies
+
+
+def update_fx(data_dir, currencies, ticker_factory, sleep, now, clock):
+    """Write data_dir/fx.json with a USD rate for each currency.
+
+    Failures are warnings: a currency keeps its last valid rate, or is left
+    out when it has none. Fetching stops once FX_TIME_BUDGET_SECONDS have
+    passed on clock. Returns the rates that were written or kept.
+    """
+    path = data_dir / FX_FILE
+    existing = load_existing_fx(path)
+    old_rates = existing["rates"] if existing else {}
+
+    to_fetch = sorted(
+        {FX_SUBUNITS.get(c, (c, 1))[0] for c in currencies} - {FX_BASE}
+    )
+    fetched = {}
+    deadline = clock() + FX_TIME_BUDGET_SECONDS
+    for index, currency in enumerate(to_fetch, start=1):
+        if clock() >= deadline:
+            break
+        symbol = fx_symbol(currency)
+        for attempt in range(1, MAX_ATTEMPTS + 1):
+            remaining = deadline - clock()
+            if remaining <= 0:
+                break
+            try:
+                fetched[currency] = call_with_deadline(
+                    remaining,
+                    fetch_fx_rate,
+                    symbol,
+                    ticker_factory,
+                    min(FX_REQUEST_TIMEOUT_SECONDS, remaining),
+                )
+                print(f"{symbol}: {fetched[currency]}")
+                break
+            except Exception as exc:
+                print(
+                    f"::warning::{symbol}: attempt {attempt}/{MAX_ATTEMPTS} "
+                    f"failed: {type(exc).__name__}: {exc}"
+                )
+                delay = BASE_DELAY_SECONDS * attempt
+                if attempt == MAX_ATTEMPTS or clock() + delay >= deadline:
+                    break
+                sleep(delay)
+        if index < len(to_fetch):
+            sleep(1)
+    missed = [c for c in to_fetch if c not in fetched]
+    if missed and clock() >= deadline:
+        print(
+            f"::warning::FX time budget of {FX_TIME_BUDGET_SECONDS}s used up "
+            f"with no new rate for {', '.join(missed)}"
+        )
+
+    rates = {FX_BASE: 1}
+    for currency in sorted(currencies - {FX_BASE}):
+        parent, divisor = FX_SUBUNITS.get(currency, (currency, 1))
+        if parent in fetched:
+            rates[currency] = round_rate(fetched[parent] / divisor)
+        elif currency in old_rates:
+            rates[currency] = old_rates[currency]
+            print(
+                f"::warning::{fx_symbol(parent)}: no new rate; "
+                f"keeping the last {currency} rate {old_rates[currency]}"
+            )
+        else:
+            print(
+                f"::warning::{fx_symbol(parent)}: no new rate and "
+                f"no earlier one; leaving {currency} out of {path}"
+            )
+    rates = dict(sorted(rates.items()))
+
+    if existing is not None and existing["rates"] == rates and (
+        existing["source"] == FX_SOURCE
+    ):
+        print(f"FX rates unchanged; leaving {path} as is")
+        return rates
+
+    record = {
+        "base": FX_BASE,
+        "source": FX_SOURCE,
+        "updatedAt": now().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "rates": rates,
+    }
+    path.write_text(json.dumps(record, indent=2, allow_nan=False) + "\n")
+    print(f"Wrote {len(rates)} FX rates to {path}")
+    return rates
+
+
+def utc_now():
+    return datetime.now(timezone.utc)
+
+
 def run(
     data_dir=DEFAULT_DATA_DIR,
     ticker_factory=default_ticker_factory,
     sleep=time.sleep,
     symbols=None,
+    now=utc_now,
+    clock=time.monotonic,
 ):
-    """Update every symbol and return the process exit code (0 or 1).
+    """Update every symbol, then fx.json, and return the exit code (0 or 1).
 
     symbols maps file keys to Yahoo symbols and defaults to `stocks`.
     """
@@ -228,6 +466,7 @@ def run(
     data_dir = Path(data_dir)
     data_dir.mkdir(exist_ok=True)
     unrecoverable = []
+    fetched_any = False
 
     for index, (file_key, symbol) in enumerate(symbols.items(), start=1):
         path = data_dir / f"{file_key}.json"
@@ -245,6 +484,7 @@ def run(
                     f"market cap {out['marketCap']} | P/E {out['peRatio']}"
                 )
                 last_error = None
+                fetched_any = True
                 break
             except Exception as exc:
                 last_error = exc
@@ -267,6 +507,27 @@ def run(
 
         if index < len(symbols):
             sleep(1)
+
+    if not fetched_any:
+        print(
+            "::warning::no stock quote was fetched; skipping FX fetches and "
+            f"leaving {data_dir / FX_FILE} as is"
+        )
+    else:
+        try:
+            update_fx(
+                data_dir,
+                stock_currencies(data_dir, symbols),
+                ticker_factory,
+                sleep,
+                now,
+                clock,
+            )
+        except Exception as exc:
+            print(
+                f"::warning::FX rates were not updated: {type(exc).__name__}: {exc}"
+            )
+            traceback.print_exception(exc)
 
     if unrecoverable:
         print(
