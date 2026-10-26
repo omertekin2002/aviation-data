@@ -503,6 +503,83 @@
       font-style: italic;
     }
 
+    /* Currency view: a two-option radio group drawn as square buttons */
+
+    .fx-panel {
+      margin-top: 24px;
+    }
+
+    .fx-toggle {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      border: 0;
+    }
+
+    .seg {
+      position: relative;
+      display: inline-flex;
+    }
+
+    .seg input {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 1px;
+      height: 1px;
+      margin: 0;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+    }
+
+    .seg span {
+      display: inline-flex;
+      align-items: center;
+      min-height: 32px;
+      padding: 6px 16px;
+      border: 1px solid var(--frame-ink);
+      background: var(--canvas);
+      color: var(--ink);
+      font: 700 12px/1 var(--font-ui);
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+
+    .seg input:checked + span {
+      background: var(--frame-ink);
+      color: var(--on-primary);
+    }
+
+    .seg input:focus-visible + span {
+      outline: 2px dotted var(--ink);
+      outline-offset: 2px;
+    }
+
+    .seg input:disabled + span {
+      border-style: dashed;
+      background: var(--canvas);
+      color: var(--ink);
+      cursor: not-allowed;
+    }
+
+    .fx-note {
+      margin-top: 10px;
+    }
+
+    .fx-source {
+      margin-top: 8px;
+      font-size: 12px;
+    }
+
+    .fx-from {
+      display: block;
+      font: 400 11px/1.35 var(--font-body);
+    }
+
+    .quotes .fx-inline {
+      display: none;
+    }
+
     .data-links {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
@@ -579,6 +656,10 @@
 
       .cur-inline {
         display: inline;
+      }
+
+      .quotes .fx-inline {
+        display: block;
       }
     }
 
@@ -804,7 +885,7 @@
         </nav>
 
         <section class="cta" aria-label="About this data">
-          <p>At Aviation Data, we'll help you follow <strong data-stat="count">25</strong> listed airlines across <strong data-stat="exchanges">15</strong> stock exchanges &mdash; share price, market cap and P/E ratio, each in the carrier's home currency.</p>
+          <p>At Aviation Data, we'll help you follow <strong data-stat="count">25</strong> listed airlines across <strong data-stat="exchanges">15</strong> stock exchanges &mdash; share price, market cap and P/E ratio, each in the carrier's home currency or, if you prefer, converted to U.S. dollars.</p>
           <p>Figures come from Yahoo Finance by way of GitHub Actions and are refreshed every 30 minutes.</p>
           <button class="btn" type="button" data-refresh>Refresh prices</button>
           <p class="status" id="status" role="status">Loading prices&hellip;</p>
@@ -836,9 +917,21 @@
         </div>
 
         <p class="lede">Share prices, market caps and P/E ratios for the world's listed airlines.</p>
-        <p class="intro">Every row below is read straight from a JSON file in this repository. Prices and market caps are quoted in each listing's trading currency &mdash; London listings in pence &mdash; so convert before you compare across markets.</p>
+        <p class="intro">Every row below is read straight from a JSON file in this repository. Prices and market caps are quoted in each listing's trading currency &mdash; London listings in pence &mdash; so convert before you compare across markets, or switch the currency view below to USD.</p>
 
         <noscript><p class="intro"><strong>JavaScript is needed to load prices.</strong> The raw JSON files are linked below.</p></noscript>
+
+        <section class="ribbon fx-panel" aria-labelledby="fx-title">
+          <div class="ribbon-title"><h2 id="fx-title">Currency view</h2><span class="ribbon-meta">FX rates from <a href="data/fx.json">fx.json</a></span></div>
+          <div class="ribbon-body">
+            <fieldset class="fx-toggle" id="fx-toggle" disabled>
+              <legend class="visually-hidden">Show prices and market caps in</legend>
+              <label class="seg"><input type="radio" name="fx-mode" value="home" checked><span>Home currency</span></label>
+              <label class="seg"><input type="radio" name="fx-mode" value="usd"><span>USD</span></label>
+            </fieldset>
+            <p class="fx-note" id="fx-note">Loading exchange rates&hellip;</p>
+          </div>
+        </section>
 
         <div class="regions" id="regions">
           <section class="ribbon has-burst" id="json" style="--tint: var(--tint-steel)" aria-labelledby="json-title">
@@ -914,6 +1007,7 @@
           </thead>
           <tbody></tbody>
         </table>
+        <p class="fx-source" hidden></p>
       </div>
     </section>
   </template>
@@ -1113,6 +1207,17 @@
     const template = document.getElementById('region-template');
     const rows = new Map();
 
+    const FX_FILE = 'data/fx.json';
+    const MODE_KEY = 'aviation-data:currency-view';
+    // Yahoo quotes London prices in pence (GBp) but reports their market caps in
+    // pounds, so a GBp row's market cap converts at the GBp rate x 100.
+    const CAP_UNITS = { GBp: { currency: 'GBP', scale: 100 } };
+
+    let fx; // undefined while loading, null when fx.json is missing or invalid
+    let mode = readMode();
+    let loading = false;
+    let loadedText = '';
+
     const money = new Intl.NumberFormat('en-US', {
       maximumFractionDigits: 2,
       minimumFractionDigits: 2,
@@ -1120,6 +1225,15 @@
     const compact = new Intl.NumberFormat('en-US', {
       notation: 'compact',
       maximumFractionDigits: 2,
+    });
+    const fxTime = new Intl.DateTimeFormat('en-GB', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+      timeZone: 'UTC',
     });
 
     function el(tag, className, text) {
@@ -1143,7 +1257,8 @@
       price.dataset.label = 'Price';
       const priceValue = el('span', 'loading', '---');
       const curInline = el('span', 'cur-inline');
-      price.append(priceValue, curInline);
+      const fxInline = el('span', 'fx-from fx-inline');
+      price.append(priceValue, curInline, fxInline);
 
       const cur = el('td', 'cur loading', '---');
       const cap = el('td', 'num loading', '---');
@@ -1157,7 +1272,7 @@
       file.append(link);
 
       row.append(el('td', 'ticker', stock.ticker), airline, price, cur, cap, pe, file);
-      rows.set(stock.file, { priceValue, curInline, cur, cap, pe });
+      rows.set(stock.file, { data: undefined, price, priceValue, curInline, fxInline, cur, cap, pe });
       return row;
     }
 
@@ -1219,49 +1334,230 @@
       node.textContent = text;
     }
 
-    async function loadOne(stock) {
-      const cells = rows.get(stock.file);
-      setCell(cells.priceValue, '---', 'loading');
-      setCell(cells.cur, '---', 'loading');
-      setCell(cells.cap, '---', 'loading');
-      setCell(cells.pe, '---', 'loading');
-      cells.curInline.textContent = '';
+    function readMode() {
+      try {
+        return localStorage.getItem(MODE_KEY) === 'usd' ? 'usd' : 'home';
+      } catch (err) {
+        return 'home';
+      }
+    }
 
+    function saveMode() {
+      try {
+        localStorage.setItem(MODE_KEY, mode);
+      } catch (err) {
+        // Private browsing can block storage; the choice then lasts until reload.
+      }
+    }
+
+    function showingUsd() {
+      return mode === 'usd' && Boolean(fx);
+    }
+
+    // Keep only a well-formed fx.json: base USD, a source, a valid updatedAt and
+    // rates that are finite numbers > 0. Anything else counts as missing.
+    function parseFx(raw) {
+      if (!raw || raw.base !== 'USD' || typeof raw.source !== 'string' || !raw.source.trim()) return null;
+      if (typeof raw.updatedAt !== 'string') return null;
+      const updated = new Date(raw.updatedAt);
+      if (Number.isNaN(updated.getTime())) return null;
+      if (!raw.rates || typeof raw.rates !== 'object') return null;
+
+      const rates = Object.create(null);
+      Object.entries(raw.rates).forEach(([currency, rate]) => {
+        if (typeof rate === 'number' && Number.isFinite(rate) && rate > 0) rates[currency] = rate;
+      });
+      return { source: raw.source.trim(), updatedAt: raw.updatedAt, updated, rates };
+    }
+
+    async function loadFx() {
+      try {
+        const res = await fetch(FX_FILE, { cache: 'no-store' });
+        if (!res.ok) throw new Error('Missing fx.json');
+        return parseFx(await res.json());
+      } catch (err) {
+        return null;
+      }
+    }
+
+    function toUsd(value, rate) {
+      const result = typeof value === 'number' ? value * rate : NaN;
+      return Number.isFinite(result) ? result : null;
+    }
+
+    // USD values for a row, or null when its currency has no rate.
+    function convert(data) {
+      const rate = data.currency ? fx.rates[data.currency] : undefined;
+      if (rate === undefined) return null;
+      const capUnit = CAP_UNITS[data.currency] || { currency: data.currency, scale: 1 };
+      return {
+        price: toUsd(data.stockPrice, rate),
+        cap: toUsd(data.marketCap, rate * capUnit.scale),
+        capCurrency: capUnit.currency,
+      };
+    }
+
+    function setCur(cells, text, note) {
+      setCell(cells.cur, text);
+      if (note) cells.cur.append(el('span', 'fx-from', note));
+      cells.curInline.textContent = text === 'n/a' ? '' : ' ' + text;
+      cells.fxInline.textContent = note || '';
+    }
+
+    function paintRow(stock) {
+      const cells = rows.get(stock.file);
+      const data = cells.data;
+      cells.price.removeAttribute('title');
+      cells.cap.removeAttribute('title');
+      cells.fxInline.textContent = '';
+
+      if (data === undefined) {
+        [cells.priceValue, cells.cur, cells.cap, cells.pe].forEach((node) => setCell(node, '---', 'loading'));
+        cells.curInline.textContent = '';
+        return;
+      }
+      if (data === null) {
+        [cells.priceValue, cells.cur, cells.cap, cells.pe].forEach((node) => setCell(node, 'no data', 'nodata'));
+        cells.curInline.textContent = '';
+        return;
+      }
+
+      setCell(cells.pe, formatNumber(data.peRatio, money));
+      const usd = showingUsd() ? convert(data) : null;
+
+      if (usd) {
+        setCell(cells.priceValue, formatNumber(usd.price, money));
+        setCell(cells.cap, formatNumber(usd.cap, compact));
+        if (data.currency === 'USD') {
+          setCur(cells, 'USD');
+        } else {
+          setCur(cells, 'USD', 'from ' + data.currency);
+          cells.price.title = 'Converted from ' + formatNumber(data.stockPrice, money) + ' ' + data.currency;
+          cells.cap.title = 'Converted from ' + formatNumber(data.marketCap, compact) + ' ' + usd.capCurrency;
+        }
+        return;
+      }
+
+      setCell(cells.priceValue, formatNumber(data.stockPrice, money));
+      setCell(cells.cap, formatNumber(data.marketCap, compact));
+      setCur(cells, data.currency || 'n/a', showingUsd() ? 'no USD rate' : '');
+      if (showingUsd()) {
+        cells.price.title = 'No USD rate for this currency, so it stays in its home currency';
+      }
+    }
+
+    function paintRows() {
+      stocks.forEach(paintRow);
+    }
+
+    function missingRates() {
+      return stocks.filter((stock) => {
+        const data = rows.get(stock.file).data;
+        return data && !(data.currency && fx.rates[data.currency] !== undefined);
+      }).length;
+    }
+
+    function sourceNote(node) {
+      const time = el('time', '', fxTime.format(fx.updated) + ' UTC');
+      time.dateTime = fx.updatedAt;
+      node.replaceChildren('Converted to USD with ' + fx.source + ' FX rates as of ', time, '.');
+    }
+
+    const fxToggle = document.getElementById('fx-toggle');
+    const fxNote = document.getElementById('fx-note');
+    const fxRadios = fxToggle.querySelectorAll('input[name="fx-mode"]');
+
+    function paintFx() {
+      const usd = showingUsd();
+      fxToggle.disabled = !fx;
+      fxRadios.forEach((radio) => {
+        radio.checked = radio.value === (usd ? 'usd' : 'home');
+      });
+
+      if (fx === undefined) {
+        fxNote.textContent = 'Loading exchange rates…';
+      } else if (fx === null) {
+        fxNote.textContent = 'USD view unavailable: the exchange-rate file (fx.json) is missing or invalid, so every value stays in its home currency.';
+      } else if (usd) {
+        sourceNote(fxNote);
+        const missing = loading ? 0 : missingRates();
+        if (missing) {
+          fxNote.append(missing === 1
+            ? ' 1 row has no USD rate, so it stays in its home currency (marked “no USD rate”).'
+            : ' ' + missing + ' rows have no USD rate, so they stay in their home currencies (marked “no USD rate”).');
+        }
+      } else {
+        fxNote.textContent = 'Values are in each listing’s home currency. Choose USD to compare across markets.';
+      }
+
+      document.querySelectorAll('.fx-source').forEach((node) => {
+        node.hidden = !usd;
+        if (usd) sourceNote(node);
+      });
+    }
+
+    function modeText() {
+      if (showingUsd()) return 'Showing prices and market caps in USD.';
+      if (fx === null) return 'Showing home currencies; the USD view is unavailable.';
+      return 'Showing home currencies.';
+    }
+
+    async function loadOne(stock, fxReady) {
+      const cells = rows.get(stock.file);
+      cells.data = undefined;
+      paintRow(stock);
+
+      let data = null;
       try {
         const res = await fetch(stock.file, { cache: 'no-store' });
         if (!res.ok) throw new Error('Missing data file');
-        const data = await res.json();
-
-        setCell(cells.priceValue, formatNumber(data.stockPrice, money));
-        setCell(cells.cur, data.currency || 'n/a');
-        cells.curInline.textContent = data.currency ? ' ' + data.currency : '';
-        setCell(cells.cap, formatNumber(data.marketCap, compact));
-        setCell(cells.pe, formatNumber(data.peRatio, money));
-        return data;
+        data = await res.json();
       } catch (err) {
-        [cells.priceValue, cells.cur, cells.cap, cells.pe].forEach((node) => setCell(node, 'no data', 'nodata'));
-        return null;
+        data = null;
       }
+
+      // Paint only once the rates for this load are known, so a row never shows
+      // values converted with a different fx.json than the source note names.
+      await fxReady;
+      cells.data = data;
+      paintRow(stock);
+      return data;
     }
 
     const statusEl = document.getElementById('status');
     const refreshButtons = document.querySelectorAll('[data-refresh]');
 
     async function loadStocks() {
+      loading = true;
       refreshButtons.forEach((button) => { button.disabled = true; });
       statusEl.textContent = 'Loading prices…';
 
-      const results = await Promise.all(stocks.map(loadOne));
+      const fxReady = loadFx().then((result) => {
+        fx = result;
+        paintFx();
+      });
+      const results = await Promise.all(stocks.map((stock) => loadOne(stock, fxReady)));
+      loading = false;
+      paintFx();
       const loaded = results.filter(Boolean);
       const currencies = new Set(loaded.map((data) => data.currency).filter(Boolean));
       const time = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
       document.getElementById('currency-count').textContent = currencies.size || '—';
-      statusEl.textContent = loaded.length + ' of ' + stocks.length + ' files loaded at ' + time + '.';
+      loadedText = loaded.length + ' of ' + stocks.length + ' files loaded at ' + time + '.';
+      statusEl.textContent = loadedText + ' ' + modeText();
       refreshButtons.forEach((button) => { button.disabled = false; });
     }
 
     refreshButtons.forEach((button) => button.addEventListener('click', loadStocks));
+    fxRadios.forEach((radio) => radio.addEventListener('change', () => {
+      if (!radio.checked) return;
+      mode = radio.value === 'usd' ? 'usd' : 'home';
+      saveMode();
+      paintRows();
+      paintFx();
+      if (!loading) statusEl.textContent = loadedText + ' ' + modeText();
+    }));
 
     setStats();
     renderRegions();
