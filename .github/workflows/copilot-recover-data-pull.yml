@@ -2,7 +2,7 @@ name: Copilot Data Pull Recovery
 
 on:
   workflow_run:
-    workflows: ["Update Stock Data & Deploy"]
+    workflows: ["Update Stock Data & Deploy", "Data Freshness Watchdog"]
     types: [completed]
 
 permissions:
@@ -34,7 +34,7 @@ jobs:
 
           {
             echo "body<<EOF_REPORT"
-            echo "The scheduled aviation data pull failed."
+            echo "The workflow \"${RUN_NAME}\" failed."
             echo
             echo "Run: ${RUN_URL}"
             echo "Workflow: ${RUN_NAME}"
